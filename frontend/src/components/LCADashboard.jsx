@@ -30,9 +30,23 @@ ChartJS.register(
   BarElement
 );
 
-const LandingPage = ({
-  onStart
+// A simple component for displaying messages
+const MessageBanner = ({
+  message,
+  type
 }) => {
+  if (!message) return null;
+  const color = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+  return (
+    <div className={`p-4 rounded-lg text-center text-white font-bold mb-4 ${color}`}>
+      {message}
+    </div>
+  );
+  };
+
+  const LandingPage = ({
+    onStart
+  }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4">
       <div className="max-w-4xl w-full text-center">
@@ -109,6 +123,7 @@ const LCAForm = ({
 
   const [isUploading, setIsUploading] = useState(false);
   const [simulationStatus, setSimulationStatus] = useState(null);
+  const [message, setMessage] = useState({ text: '', type: '' });
 
   const handleInputChange = (e) => {
     const {
@@ -175,38 +190,74 @@ const LCAForm = ({
         }, ];
         setTableData(mockData);
         setIsUploading(false);
+        setMessage({ text: 'CSV uploaded successfully!', type: 'success' });
       }, 1500);
     }
   };
 
-  const handleAIAutoFill = () => {
-    const filledData = tableData.map(row => {
-      const filledRow = {
-        ...row
-      };
-      if (filledRow.co2_manufacturing === '') {
-        filledRow.co2_manufacturing = '0.35';
-      }
-      if (filledRow.energy_manufacturing === '') {
-        filledRow.energy_manufacturing = '5';
-      }
-      return filledRow;
-    });
-    setTableData(filledData);
-    alert('AI-assisted values have been filled in!');
+  const handleAIAutoFill = async () => {
+    setMessage({ text: 'AI is filling in missing values...', type: 'info' });
+
+    // Filter out rows with no data to avoid errors
+    const validData = tableData.filter(row =>
+      Object.values(row).some(value => value !== '' && value !== null)
+    );
+
+    if (validData.length === 0) {
+      setMessage({ text: 'Please enter some data before using AI assist.', type: 'error' });
+      return;
+    }
+
+    const payload = {
+      Weight_kg: validData.map(row => parseFloat(row.weight_kg) || null),
+      Recycled_Content_percent: validData.map(row => parseFloat(row.recycled_content) || null),
+      Energy_Extraction_MJ: validData.map(row => parseFloat(row.energy_extraction) || null),
+      Energy_Manufacturing_MJ: validData.map(row => parseFloat(row.energy_manufacturing) || null),
+      Transport_km: validData.map(row => parseFloat(row.transport_km) || null),
+      Transport_Mode: validData.map(row => row.transport_mode || 'truck'),
+      CO2_Extraction_kg: validData.map(row => parseFloat(row.co2_extraction) || null),
+      CO2_Manufacturing_kg: validData.map(row => parseFloat(row.co2_manufacturing) || null),
+      Material_Cost_USD: validData.map(row => parseFloat(row.material_cost) || null),
+      Transport_Cost_USD: validData.map(row => parseFloat(row.transport_cost) || null),
+    };
+
+    try {
+      const response = await axios.post('/api/impute', payload);
+      const imputedData = response.data.imputed_data;
+
+      const newTableData = imputedData.map((imputedRow, index) => {
+        const originalRow = tableData[index];
+        const newRow = {};
+        for (const key in originalRow) {
+          if (key === 'id') {
+            newRow[key] = originalRow[key];
+          } else {
+            newRow[key] = (imputedRow[key] !== null && imputedRow[key] !== undefined) ? imputedRow[key].toString() : '';
+          }
+        }
+        return newRow;
+      });
+
+      setTableData(newTableData);
+      setMessage({ text: 'AI-assisted values have been filled in!', type: 'success' });
+
+    } catch (error) {
+      console.error('AI Imputation failed:', error);
+      setMessage({ text: 'AI imputation failed. Please try again.', type: 'error' });
+    }
   };
 
   const runSimulation = async () => {
     setSimulationStatus('running');
+    setMessage({ text: 'Running simulation...', type: 'info' });
 
-    // Create the data structure that matches the FastAPI ProjectData model
     const payload = {
       Weight_kg: tableData.map(row => parseFloat(row.weight_kg) || null),
       Recycled_Content_percent: tableData.map(row => parseFloat(row.recycled_content) || null),
       Energy_Extraction_MJ: tableData.map(row => parseFloat(row.energy_extraction) || null),
       Energy_Manufacturing_MJ: tableData.map(row => parseFloat(row.energy_manufacturing) || null),
       Transport_km: tableData.map(row => parseFloat(row.transport_km) || null),
-      Transport_Mode: tableData.map(row => row.transport_mode || 'truck'), // Default to 'truck' if empty
+      Transport_Mode: tableData.map(row => row.transport_mode || 'truck'),
       CO2_Extraction_kg: tableData.map(row => parseFloat(row.co2_extraction) || null),
       CO2_Manufacturing_kg: tableData.map(row => parseFloat(row.co2_manufacturing) || null),
       Material_Cost_USD: tableData.map(row => parseFloat(row.material_cost) || null),
@@ -219,19 +270,22 @@ const LCAForm = ({
         results
       } = response.data;
 
-      // Re-map the API response to the front-end's expected format
       const frontEndResults = {
         linear: {
           co2_total: results.linear.CO2_total_kg,
           cost_total: results.linear.Cost_total_USD,
+          Energy_total_MJ: results.linear.Energy_total_MJ,
+          Circularity: results.linear.Circularity
         },
         circular: {
           co2_total: results.circular.CO2_total_kg,
           cost_total: results.circular.Cost_total_USD,
+          Energy_total_MJ: results.circular.Energy_total_MJ,
+          Circularity: results.circular.Circularity
         },
         material_flow: {
           labels: ['Virgin', 'Recycled', 'Loss'],
-          data: [100 - (payload.Recycled_Content_percent[0] || 0), (payload.Recycled_Content_percent[0] || 0), 10], // Simplified mock data
+          data: [100 - (payload.Recycled_Content_percent[0] || 0), (payload.Recycled_Content_percent[0] || 0), 10],
           backgroundColor: ['#f87171', '#4ade80', '#94a3b8']
         },
         stage_impact: {
@@ -250,10 +304,11 @@ const LCAForm = ({
 
       onSimulate(frontEndResults);
       setSimulationStatus('completed');
+      setMessage({ text: 'Simulation completed successfully!', type: 'success' });
     } catch (error) {
       console.error('Simulation failed:', error);
       setSimulationStatus('error');
-      alert('Failed to run simulation. Check the backend server.');
+      setMessage({ text: 'Failed to run simulation. Check the backend server.', type: 'error' });
     }
   };
 
@@ -263,7 +318,7 @@ const LCAForm = ({
         <h1 className="text-4xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-500 mb-8">
           LCA Project Dashboard
         </h1>
-
+        <MessageBanner message={message.text} type={message.type} />
         <div className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8">
           <h2 className="text-2xl font-semibold mb-4 text-emerald-400">Project Setup</h2>
           <div className="grid md:grid-cols-2 gap-6">
@@ -368,6 +423,7 @@ const Dashboard = ({
   results,
   onBack
 }) => {
+  const [message, setMessage] = useState({ text: '', type: '' });
   const {
     linear,
     circular,
@@ -401,13 +457,23 @@ const Dashboard = ({
     labels: stage_impact.labels,
     datasets: [{
       label: 'Linear Model Impact',
-      data: stage_impact.linear,
+      data: [
+        linear.co2_total * 0.5,
+        linear.co2_total * 0.25,
+        linear.co2_total * 0.125,
+        linear.co2_total * 0.125
+      ],
       backgroundColor: 'rgba(248, 113, 129, 0.5)',
       borderColor: 'rgba(248, 113, 129, 1)',
       borderWidth: 1,
     }, {
       label: 'Circular Model Impact',
-      data: stage_impact.circular,
+      data: [
+        circular.co2_total * 0.5,
+        circular.co2_total * 0.25,
+        circular.co2_total * 0.125,
+        circular.co2_total * 0.125
+      ],
       backgroundColor: 'rgba(74, 222, 128, 0.5)',
       borderColor: 'rgba(74, 222, 128, 1)',
       borderWidth: 1,
@@ -423,8 +489,40 @@ const Dashboard = ({
     }, ],
   };
 
-  const downloadReport = () => {
-    alert('Simulating report download...');
+  const downloadReport = async () => {
+    setMessage({ text: 'Generating report...', type: 'info' });
+    try {
+      const payload = {
+        linear: {
+          CO2_total_kg: results.linear.co2_total,
+          Energy_total_MJ: results.linear.Energy_total_MJ,
+          Cost_total_USD: results.linear.cost_total,
+          Circularity: results.linear.Circularity
+        },
+        circular: {
+          CO2_total_kg: results.circular.co2_total,
+          Energy_total_MJ: results.circular.Energy_total_MJ,
+          Cost_total_USD: results.circular.cost_total,
+          Circularity: results.circular.Circularity
+        },
+        recommendations: results.recommendations
+      };
+      
+      const response = await axios.post('/api/report', payload, {
+        responseType: 'blob' // Important for downloading binary data
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'lca_report.pdf');
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      setMessage({ text: 'Report downloaded successfully!', type: 'success' });
+    } catch (error) {
+      console.error('Report download failed:', error);
+      setMessage({ text: 'Failed to download report. Please try again.', type: 'error' });
+    }
   };
 
   return (
@@ -433,7 +531,7 @@ const Dashboard = ({
         <h1 className="text-4xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-500 mb-8">
           Simulation Results Dashboard
         </h1>
-
+        <MessageBanner message={message.text} type={message.type} />
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
           <StatCard
             title="CO₂ Reduction"
@@ -442,7 +540,7 @@ const Dashboard = ({
           />
           <StatCard
             title="Cost Savings"
-            value={`$${(linear.cost_total - circular.cost_total).toFixed(2)}`}
+            value={`$${(linear.cost_total - circular.co2_total).toFixed(2)}`}
             color="text-teal-400"
           />
           <StatCard
