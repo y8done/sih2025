@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import {
   Line,
   Bar,
@@ -95,13 +96,13 @@ const LCAForm = ({
     weight_kg: '0.015',
     recycled_content: '70',
     energy_extraction: '200',
-    energy_manufacturing: '', // Missing value
+    energy_manufacturing: '',
     transport_km: '500',
     transport_mode: 'Truck',
     eol_method: 'Recycling',
     recycling_yield: '90',
     co2_extraction: '8',
-    co2_manufacturing: '', // Missing value
+    co2_manufacturing: '',
     material_cost: '0.02',
     transport_cost: '0.005'
   }]);
@@ -195,72 +196,65 @@ const LCAForm = ({
     alert('AI-assisted values have been filled in!');
   };
 
-  const runSimulation = () => {
+  const runSimulation = async () => {
     setSimulationStatus('running');
 
-    setTimeout(() => {
-      const parsedData = tableData.map(row => ({
-        ...row,
-        weight_kg: parseFloat(row.weight_kg) || 0,
-        recycled_content: parseFloat(row.recycled_content) || 0,
-        energy_extraction: parseFloat(row.energy_extraction) || 0,
-        energy_manufacturing: parseFloat(row.energy_manufacturing) || 0,
-        transport_km: parseFloat(row.transport_km) || 0,
-        recycling_yield: parseFloat(row.recycling_yield) || 0,
-        co2_extraction: parseFloat(row.co2_extraction) || 0,
-        co2_manufacturing: parseFloat(row.co2_manufacturing) || 0,
-        material_cost: parseFloat(row.material_cost) || 0,
-        transport_cost: parseFloat(row.transport_cost) || 0
-      }));
+    // Create the data structure that matches the FastAPI ProjectData model
+    const payload = {
+      Weight_kg: tableData.map(row => parseFloat(row.weight_kg) || null),
+      Recycled_Content_percent: tableData.map(row => parseFloat(row.recycled_content) || null),
+      Energy_Extraction_MJ: tableData.map(row => parseFloat(row.energy_extraction) || null),
+      Energy_Manufacturing_MJ: tableData.map(row => parseFloat(row.energy_manufacturing) || null),
+      Transport_km: tableData.map(row => parseFloat(row.transport_km) || null),
+      Transport_Mode: tableData.map(row => row.transport_mode || 'truck'), // Default to 'truck' if empty
+      CO2_Extraction_kg: tableData.map(row => parseFloat(row.co2_extraction) || null),
+      CO2_Manufacturing_kg: tableData.map(row => parseFloat(row.co2_manufacturing) || null),
+      Material_Cost_USD: tableData.map(row => parseFloat(row.material_cost) || null),
+      Transport_Cost_USD: tableData.map(row => parseFloat(row.transport_cost) || null),
+    };
 
-      const linear_co2 = parsedData.reduce((sum, row) => sum + row.co2_extraction + row.co2_manufacturing, 0);
-      const linear_cost = parsedData.reduce((sum, row) => sum + row.material_cost + row.transport_cost, 0);
+    try {
+      const response = await axios.post('/api/simulate', payload);
+      const {
+        results
+      } = response.data;
 
-      const circular_co2 = parsedData.reduce((sum, row) => {
-        const recycled_fraction = row.recycled_content / 100;
-        const virgin_fraction = 1 - recycled_fraction;
-        const co2 = (virgin_fraction * row.co2_extraction) + row.co2_manufacturing;
-        return sum + co2;
-      }, 0);
-
-      const circular_cost = parsedData.reduce((sum, row) => {
-        const recycled_fraction = row.recycled_content / 100;
-        const virgin_fraction = 1 - recycled_fraction;
-        const cost = (virgin_fraction * row.material_cost) + row.transport_cost;
-        return sum + cost;
-      }, 0);
-
-      const mockResult = {
+      // Re-map the API response to the front-end's expected format
+      const frontEndResults = {
         linear: {
-          co2_total: linear_co2,
-          cost_total: linear_cost
+          co2_total: results.linear.CO2_total_kg,
+          cost_total: results.linear.Cost_total_USD,
         },
         circular: {
-          co2_total: circular_co2,
-          cost_total: circular_cost
+          co2_total: results.circular.CO2_total_kg,
+          cost_total: results.circular.Cost_total_USD,
         },
         material_flow: {
           labels: ['Virgin', 'Recycled', 'Loss'],
-          data: [100 - parsedData[0].recycled_content, parsedData[0].recycled_content, 10],
+          data: [100 - (payload.Recycled_Content_percent[0] || 0), (payload.Recycled_Content_percent[0] || 0), 10], // Simplified mock data
           backgroundColor: ['#f87171', '#4ade80', '#94a3b8']
         },
         stage_impact: {
           labels: ['Extraction', 'Processing', 'Transport', 'EoL'],
-          linear: [linear_co2 / 2, linear_co2 / 4, linear_co2 / 8, linear_co2 / 8],
-          circular: [circular_co2 / 2, circular_co2 / 4, circular_co2 / 8, circular_co2 / 8]
+          linear: [results.linear.CO2_total_kg / 2, results.linear.CO2_total_kg / 4, results.linear.CO2_total_kg / 8, results.linear.CO2_total_kg / 8],
+          circular: [results.circular.CO2_total_kg / 2, results.circular.CO2_total_kg / 4, results.circular.CO2_total_kg / 8, results.circular.CO2_total_kg / 8]
         },
         recommendations: [{
-          title: 'Increase Recycled Content',
-          text: `Increasing recycled content from ${parsedData[0].recycled_content}% to 80% could further reduce CO₂ emissions.`
+          title: 'Optimal Scenario',
+          text: results.recommendation
         }, {
-          title: 'Optimize Transport',
-          text: 'Switching from truck to rail transport for 50% of goods can save 10% on costs.'
+          title: 'Increase Recycled Content',
+          text: `Based on your data, increasing recycled content could further reduce CO₂ emissions.`
         }, ],
       };
 
-      onSimulate(mockResult);
+      onSimulate(frontEndResults);
       setSimulationStatus('completed');
-    }, 1500);
+    } catch (error) {
+      console.error('Simulation failed:', error);
+      setSimulationStatus('error');
+      alert('Failed to run simulation. Check the backend server.');
+    }
   };
 
   return (
