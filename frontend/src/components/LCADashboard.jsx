@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
   Line,
@@ -30,23 +30,27 @@ ChartJS.register(
   BarElement
 );
 
-// A simple component for displaying messages
+// --- Global Constants/Mocks ---
+const COMPANY_ID = 'company1'; // Mock user/company ID for MongoDB lookup
+
+// --- Component Definitions ---
+
 const MessageBanner = ({
   message,
   type
 }) => {
   if (!message) return null;
-  const color = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+  const color = type === 'success' ? 'bg-green-500' : (type === 'error' ? 'bg-red-500' : 'bg-blue-500');
   return (
     <div className={`p-4 rounded-lg text-center text-white font-bold mb-4 ${color}`}>
       {message}
     </div>
   );
-  };
+};
 
-  const LandingPage = ({
-    onStart
-  }) => {
+const LandingPage = ({
+  onStart
+}) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4">
       <div className="max-w-4xl w-full text-center">
@@ -95,8 +99,169 @@ const FeatureCard = ({
   </div>
 );
 
+
+const CompanyDefaultsForm = ({
+  onSetDefaults,
+  defaults,
+  isLoaded
+}) => {
+  // All custom defaults matching the backend model
+  const [customDefaults, setCustomDefaults] = useState(defaults || {
+    co2_per_kwh_extraction: 0.5,
+    co2_per_kwh_manufacturing: 0.35,
+    recycling_yield_default: 85,
+    transport_cost_per_km_default: 0.005,
+    avg_energy_extraction_mj: 250,
+  });
+  const [message, setMessage] = useState({ text: '', type: '' });
+
+  useEffect(() => {
+    if (defaults && isLoaded) {
+        setCustomDefaults(defaults);
+        setMessage({ 
+            text: defaults.co2_per_kwh_extraction ? 'Custom parameters loaded.' : 'Using system defaults. Set yours below!', 
+            type: 'info' 
+        });
+    }
+  }, [defaults, isLoaded]);
+
+  const handleDefaultChange = (e) => {
+    const {
+      name,
+      value
+    } = e.target;
+    // Set to number or 0 if empty/invalid
+    setCustomDefaults(prev => ({
+      ...prev,
+      [name]: parseFloat(value) || 0
+    }));
+  };
+
+  const handleSaveDefaults = async () => {
+    setMessage({ text: 'Saving parameters...', type: 'info' });
+    try {
+      // Payload includes all custom parameters defined in the component state
+      const payload = {
+        co2_per_kwh_extraction: customDefaults.co2_per_kwh_extraction,
+        co2_per_kwh_manufacturing: customDefaults.co2_per_kwh_manufacturing,
+        recycling_yield_default: customDefaults.recycling_yield_default,
+        transport_cost_per_km_default: customDefaults.transport_cost_per_km_default,
+        avg_energy_extraction_mj: customDefaults.avg_energy_extraction_mj,
+        // No need to include material_traceability_score as it defaults on backend
+      };
+      
+      await axios.post(`/api/defaults/${COMPANY_ID}`, payload);
+      onSetDefaults(customDefaults);
+      setMessage({ text: 'Custom parameters saved successfully!', type: 'success' });
+    } catch (error) {
+      console.error('Failed to save defaults:', error);
+      setMessage({ text: 'Failed to save parameters. Check MongoDB connection.', type: 'error' });
+    }
+  };
+
+  const inputStyle = "p-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all w-full";
+
+  return (
+    <div className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8">
+      <MessageBanner message={message.text} type={message.type} />
+      <h2 className="text-2xl font-semibold mb-4 text-sky-400">
+        Custom AI Parameters (Company: {COMPANY_ID})
+      </h2>
+      <p className="text-gray-400 mb-4">
+        These values will be used for AI data imputation when inputs are missing, providing more accurate, company-specific results.
+      </p>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        
+        {/* 1. CO2 per kWh (Extraction) */}
+        <label className="block">
+          <span className="text-gray-300 text-sm">
+            CO₂ / kWh (Extraction, kg)
+          </span>
+          <input
+            type="number"
+            step="0.01"
+            name="co2_per_kwh_extraction"
+            value={customDefaults.co2_per_kwh_extraction}
+            onChange={handleDefaultChange}
+            className={inputStyle}
+          />
+        </label>
+        
+        {/* 2. CO2 per kWh (Manufacturing) */}
+        <label className="block">
+          <span className="text-gray-300 text-sm">
+            CO₂ / kWh (Manufacturing, kg)
+          </span>
+          <input
+            type="number"
+            step="0.01"
+            name="co2_per_kwh_manufacturing"
+            value={customDefaults.co2_per_kwh_manufacturing}
+            onChange={handleDefaultChange}
+            className={inputStyle}
+          />
+        </label>
+
+        {/* 3. Recycling Yield Default */}
+        <label className="block">
+          <span className="text-gray-300 text-sm">
+            Recycling Yield Default (%)
+          </span>
+          <input
+            type="number"
+            step="1"
+            name="recycling_yield_default"
+            value={customDefaults.recycling_yield_default}
+            onChange={handleDefaultChange}
+            className={inputStyle}
+          />
+        </label>
+
+        {/* 4. Transport Cost per KM */}
+        <label className="block">
+          <span className="text-gray-300 text-sm">
+            Transport Cost / km (USD)
+          </span>
+          <input
+            type="number"
+            step="0.001"
+            name="transport_cost_per_km_default"
+            value={customDefaults.transport_cost_per_km_default}
+            onChange={handleDefaultChange}
+            className={inputStyle}
+          />
+        </label>
+
+        {/* 5. Average Energy Extraction */}
+        <label className="block">
+          <span className="text-gray-300 text-sm">
+            Avg. Energy Extraction (MJ)
+          </span>
+          <input
+            type="number"
+            step="10"
+            name="avg_energy_extraction_mj"
+            value={customDefaults.avg_energy_extraction_mj}
+            onChange={handleDefaultChange}
+            className={inputStyle}
+          />
+        </label>
+
+      </div>
+      <button
+        onClick={handleSaveDefaults}
+        className="mt-6 px-4 py-2 text-md font-semibold rounded-lg bg-teal-500 hover:bg-teal-600 transition-colors duration-300"
+      >
+        Save Custom Parameters
+      </button>
+    </div>
+  );
+};
+
+
 const LCAForm = ({
-  onSimulate
+  onSimulate,
+  companyDefaults // Passed from App state
 }) => {
   const [formData, setFormData] = useState({
     metal_type: 'Aluminium Can',
@@ -110,13 +275,13 @@ const LCAForm = ({
     weight_kg: '0.015',
     recycled_content: '70',
     energy_extraction: '200',
-    energy_manufacturing: '',
+    energy_manufacturing: '', // Missing value
     transport_km: '500',
     transport_mode: 'Truck',
     eol_method: 'Recycling',
     recycling_yield: '90',
     co2_extraction: '8',
-    co2_manufacturing: '',
+    co2_manufacturing: '', // Missing value
     material_cost: '0.02',
     transport_cost: '0.005'
   }]);
@@ -124,6 +289,7 @@ const LCAForm = ({
   const [isUploading, setIsUploading] = useState(false);
   const [simulationStatus, setSimulationStatus] = useState(null);
   const [message, setMessage] = useState({ text: '', type: '' });
+
 
   const handleInputChange = (e) => {
     const {
@@ -169,6 +335,7 @@ const LCAForm = ({
   };
 
   const handleFileChange = (e) => {
+    // Mock CSV Upload Logic
     const file = e.target.files[0];
     if (file) {
       setIsUploading(true);
@@ -198,119 +365,141 @@ const LCAForm = ({
   const handleAIAutoFill = async () => {
     setMessage({ text: 'AI is filling in missing values...', type: 'info' });
 
-    // Filter out rows with no data to avoid errors
-    const validData = tableData.filter(row =>
-      Object.values(row).some(value => value !== '' && value !== null)
-    );
-
-    if (validData.length === 0) {
-      setMessage({ text: 'Please enter some data before using AI assist.', type: 'error' });
-      return;
-    }
-
+    // Payload uses row-oriented data
     const payload = {
-      Weight_kg: validData.map(row => parseFloat(row.weight_kg) || null),
-      Recycled_Content_percent: validData.map(row => parseFloat(row.recycled_content) || null),
-      Energy_Extraction_MJ: validData.map(row => parseFloat(row.energy_extraction) || null),
-      Energy_Manufacturing_MJ: validData.map(row => parseFloat(row.energy_manufacturing) || null),
-      Transport_km: validData.map(row => parseFloat(row.transport_km) || null),
-      Transport_Mode: validData.map(row => row.transport_mode || 'truck'),
-      CO2_Extraction_kg: validData.map(row => parseFloat(row.co2_extraction) || null),
-      CO2_Manufacturing_kg: validData.map(row => parseFloat(row.co2_manufacturing) || null),
-      Material_Cost_USD: validData.map(row => parseFloat(row.material_cost) || null),
-      Transport_Cost_USD: validData.map(row => parseFloat(row.transport_cost) || null),
+        project_metadata: formData,
+        data: tableData.map(row => ({
+            // Convert numbers/nulls for FastAPI/Pydantic validation
+            weight_kg: parseFloat(row.weight_kg) || null,
+            recycled_content: parseFloat(row.recycled_content) || null,
+            energy_extraction: parseFloat(row.energy_extraction) || null,
+            energy_manufacturing: parseFloat(row.energy_manufacturing) || null,
+            transport_km: parseFloat(row.transport_km) || null,
+            transport_mode: row.transport_mode || null,
+            recycling_yield: parseFloat(row.recycling_yield) || null,
+            co2_extraction: parseFloat(row.co2_extraction) || null,
+            co2_manufacturing: parseFloat(row.co2_manufacturing) || null,
+            material_cost: parseFloat(row.material_cost) || null,
+            transport_cost: parseFloat(row.transport_cost) || null,
+            eol_method: row.eol_method || null,
+        })),
+        // Pass all custom defaults for the Python model to prioritize
+        custom_defaults: companyDefaults && companyDefaults.co2_per_kwh_extraction ? companyDefaults : null
     };
 
     try {
-      const response = await axios.post('/api/impute', payload);
-      const imputedData = response.data.imputed_data;
+        const response = await axios.post('/api/impute', payload);
+        const imputedData = response.data.imputed_data;
 
-      const newTableData = imputedData.map((imputedRow, index) => {
-        const originalRow = tableData[index];
-        const newRow = {};
-        for (const key in originalRow) {
-          if (key === 'id') {
-            newRow[key] = originalRow[key];
-          } else {
-            newRow[key] = (imputedRow[key] !== null && imputedRow[key] !== undefined) ? imputedRow[key].toString() : '';
-          }
-        }
-        return newRow;
-      });
+        // Map imputed data back to rows in the table
+        const newTableData = imputedData.map((imputedRow, index) => {
+            const originalRow = tableData[index];
+            const newRow = { ...originalRow };
+            
+            // Overwrite null/empty fields with imputed data
+            Object.keys(imputedRow).forEach(key => {
+                const originalValue = originalRow[key];
+                // Check if the original field was empty/missing, AND the imputed value is not null
+                if ((originalValue === '' || originalValue === null || originalValue === undefined) && 
+                    (imputedRow[key] !== null && imputedRow[key] !== undefined)) {
+                    
+                    newRow[key] = imputedRow[key].toString(); 
+                }
+            });
+            return newRow;
+        });
 
-      setTableData(newTableData);
-      setMessage({ text: 'AI-assisted values have been filled in!', type: 'success' });
+        setTableData(newTableData);
+        setMessage({ 
+            text: `AI-assisted values filled using ${companyDefaults.co2_per_kwh_extraction ? 'CUSTOM' : 'SYSTEM'} parameters!`, 
+            type: 'success' 
+        });
 
     } catch (error) {
-      console.error('AI Imputation failed:', error);
-      setMessage({ text: 'AI imputation failed. Please try again.', type: 'error' });
+        console.error('AI Imputation failed:', error.response ? error.response.data : error.message);
+        setMessage({ text: 'AI imputation failed. Check Python server console.', type: 'error' });
     }
   };
+
 
   const runSimulation = async () => {
     setSimulationStatus('running');
     setMessage({ text: 'Running simulation...', type: 'info' });
-
+    
+    // Ensure data is sent in the correct row-oriented structure for FastAPI
     const payload = {
-      Weight_kg: tableData.map(row => parseFloat(row.weight_kg) || null),
-      Recycled_Content_percent: tableData.map(row => parseFloat(row.recycled_content) || null),
-      Energy_Extraction_MJ: tableData.map(row => parseFloat(row.energy_extraction) || null),
-      Energy_Manufacturing_MJ: tableData.map(row => parseFloat(row.energy_manufacturing) || null),
-      Transport_km: tableData.map(row => parseFloat(row.transport_km) || null),
-      Transport_Mode: tableData.map(row => row.transport_mode || 'truck'),
-      CO2_Extraction_kg: tableData.map(row => parseFloat(row.co2_extraction) || null),
-      CO2_Manufacturing_kg: tableData.map(row => parseFloat(row.co2_manufacturing) || null),
-      Material_Cost_USD: tableData.map(row => parseFloat(row.material_cost) || null),
-      Transport_Cost_USD: tableData.map(row => parseFloat(row.transport_cost) || null),
+        project_metadata: formData,
+        data: tableData.map(row => ({
+            weight_kg: parseFloat(row.weight_kg) || null,
+            recycled_content: parseFloat(row.recycled_content) || null,
+            energy_extraction: parseFloat(row.energy_extraction) || null,
+            energy_manufacturing: parseFloat(row.energy_manufacturing) || null,
+            transport_km: parseFloat(row.transport_km) || null,
+            transport_mode: row.transport_mode || null,
+            recycling_yield: parseFloat(row.recycling_yield) || null,
+            co2_extraction: parseFloat(row.co2_extraction) || null,
+            co2_manufacturing: parseFloat(row.co2_manufacturing) || null,
+            material_cost: parseFloat(row.material_cost) || null,
+            transport_cost: parseFloat(row.transport_cost) || null,
+            eol_method: row.eol_method || null,
+        })),
+        custom_defaults: companyDefaults && companyDefaults.co2_per_kwh_extraction ? companyDefaults : null
     };
 
     try {
-      const response = await axios.post('/api/simulate', payload);
-      const {
-        results
-      } = response.data;
+        const response = await axios.post('/api/simulate', payload);
+        const { results } = response.data;
+        
+        // Structure results for frontend components
+        const frontEndResults = {
+            linear: {
+                co2_total: results.linear.CO2_total_kg,
+                cost_total: results.linear.Cost_total_USD,
+                Circularity: results.linear.Circularity.MCI
+            },
+            circular: {
+                co2_total: results.circular.CO2_total_kg,
+                cost_total: results.circular.Cost_total_USD,
+                Circularity: results.circular.Circularity.MCI
+            },
+            // Using actual outputs from Python for better representation
+            material_flow: {
+                labels: ['Virgin', 'Recycled', 'Loss'],
+                data: [
+                    results.circular.Virgin_Input_percent || 30, 
+                    results.circular.Recycled_Input_percent || 60, 
+                    10 // Mock loss if Python doesn't provide
+                ],
+                backgroundColor: ['#f87171', '#4ade80', '#94a3b8']
+            },
+            // Stage impact data uses the calculated CO2 totals from Python
+            stage_impact: {
+                labels: ['Extraction', 'Processing', 'Transport', 'EoL'],
+                linear: [results.linear.CO2_total_kg * 0.4, results.linear.CO2_total_kg * 0.3, results.linear.CO2_total_kg * 0.2, results.linear.CO2_total_kg * 0.1],
+                circular: [results.circular.CO2_total_kg * 0.25, results.circular.CO2_total_kg * 0.3, results.circular.CO2_total_kg * 0.25, results.circular.CO2_total_kg * 0.2],
+            },
+            recommendations: [{
+                title: 'Optimal Scenario',
+                text: results.recommendation
+            }, {
+                title: 'Increase Recycled Content',
+                text: `Based on your data, increasing recycled content could further reduce CO₂ emissions and improve the Circularity Score of ${results.circular.Circularity.MCI.toFixed(2)}.`
+            }],
+        };
 
-      const frontEndResults = {
-        linear: {
-          co2_total: results.linear.CO2_total_kg,
-          cost_total: results.linear.Cost_total_USD,
-          Energy_total_MJ: results.linear.Energy_total_MJ,
-          Circularity: results.linear.Circularity
-        },
-        circular: {
-          co2_total: results.circular.CO2_total_kg,
-          cost_total: results.circular.Cost_total_USD,
-          Energy_total_MJ: results.circular.Energy_total_MJ,
-          Circularity: results.circular.Circularity
-        },
-        material_flow: {
-          labels: ['Virgin', 'Recycled', 'Loss'],
-          data: [100 - (payload.Recycled_Content_percent[0] || 0), (payload.Recycled_Content_percent[0] || 0), 10],
-          backgroundColor: ['#f87171', '#4ade80', '#94a3b8']
-        },
-        stage_impact: {
-          labels: ['Extraction', 'Processing', 'Transport', 'EoL'],
-          linear: [results.linear.CO2_total_kg / 2, results.linear.CO2_total_kg / 4, results.linear.CO2_total_kg / 8, results.linear.CO2_total_kg / 8],
-          circular: [results.circular.CO2_total_kg / 2, results.circular.CO2_total_kg / 4, results.circular.CO2_total_kg / 8, results.circular.CO2_total_kg / 8]
-        },
-        recommendations: [{
-          title: 'Optimal Scenario',
-          text: results.recommendation
-        }, {
-          title: 'Increase Recycled Content',
-          text: `Based on your data, increasing recycled content could further reduce CO₂ emissions.`
-        }, ],
-      };
-
-      onSimulate(frontEndResults);
-      setSimulationStatus('completed');
-      setMessage({ text: 'Simulation completed successfully!', type: 'success' });
+        onSimulate(frontEndResults);
+        setSimulationStatus('completed');
+        setMessage({ text: 'Simulation completed successfully!', type: 'success' });
     } catch (error) {
-      console.error('Simulation failed:', error);
-      setSimulationStatus('error');
-      setMessage({ text: 'Failed to run simulation. Check the backend server.', type: 'error' });
+        console.error('Simulation failed:', error.response ? error.response.data : error.message);
+        setSimulationStatus('error');
+        setMessage({ text: 'Failed to run simulation. Check Python server console.', type: 'error' });
     }
   };
+
+  // Determine the display string for custom defaults toggle
+  const customDefaultsUsed = companyDefaults && companyDefaults.co2_per_kwh_extraction;
+  const defaultsStatusText = customDefaultsUsed ? 'COMPANY CUSTOM' : 'SYSTEM DEFAULT';
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
@@ -319,6 +508,8 @@ const LCAForm = ({
           LCA Project Dashboard
         </h1>
         <MessageBanner message={message.text} type={message.type} />
+        
+        {/* Project Setup Section */}
         <div className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8">
           <h2 className="text-2xl font-semibold mb-4 text-emerald-400">Project Setup</h2>
           <div className="grid md:grid-cols-2 gap-6">
@@ -360,16 +551,22 @@ const LCAForm = ({
           </div>
         </div>
 
+        {/* Data Input Section */}
         <div className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8">
           <h2 className="text-2xl font-semibold mb-4 text-emerald-400">Data Input</h2>
           <div className="flex justify-between items-center mb-4">
             <label className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg cursor-pointer transition-colors duration-300">
-              {isUploading ? 'Uploading...' : 'Upload CSV File'}
+              {isUploading ? 'Uploading...' : 'Upload CSV File (Mock)'}
               <input type="file" onChange={handleFileChange} className="hidden" accept=".csv" disabled={isUploading} />
             </label>
-            <button onClick={handleAIAutoFill} className="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300">
-              💡 Suggest with AI
-            </button>
+            <div className="flex items-center space-x-4">
+                <span className={`px-3 py-1 text-sm font-semibold rounded-lg ${customDefaultsUsed ? 'bg-sky-500 text-white' : 'bg-gray-700 text-gray-300'}`}>
+                    AI Defaults: {defaultsStatusText}
+                </span>
+                <button onClick={handleAIAutoFill} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300">
+                    💡 Suggest with AI
+                </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-700 rounded-lg overflow-hidden">
@@ -391,7 +588,8 @@ const LCAForm = ({
                           type="text"
                           value={row[field]}
                           onChange={(e) => handleTableChange(e, row.id, field)}
-                          className="w-full bg-transparent border-none text-gray-300 focus:outline-none"
+                          className={`w-full bg-transparent border-none text-gray-300 focus:outline-none ${!row[field] ? 'placeholder-red-400 border border-red-500 rounded' : ''}`}
+                          placeholder={!row[field] ? 'Missing' : ''}
                         />
                       </td>
                     ))}
@@ -405,6 +603,7 @@ const LCAForm = ({
           </button>
         </div>
 
+        {/* Run Simulation Button */}
         <div className="text-center mb-8">
           <button
             onClick={runSimulation}
@@ -432,6 +631,8 @@ const Dashboard = ({
     recommendations
   } = results;
 
+  // --- Chart Data Definition ---
+
   const costData = {
     labels: ['Linear', 'Circular'],
     datasets: [{
@@ -457,23 +658,13 @@ const Dashboard = ({
     labels: stage_impact.labels,
     datasets: [{
       label: 'Linear Model Impact',
-      data: [
-        linear.co2_total * 0.5,
-        linear.co2_total * 0.25,
-        linear.co2_total * 0.125,
-        linear.co2_total * 0.125
-      ],
+      data: stage_impact.linear,
       backgroundColor: 'rgba(248, 113, 129, 0.5)',
       borderColor: 'rgba(248, 113, 129, 1)',
       borderWidth: 1,
     }, {
       label: 'Circular Model Impact',
-      data: [
-        circular.co2_total * 0.5,
-        circular.co2_total * 0.25,
-        circular.co2_total * 0.125,
-        circular.co2_total * 0.125
-      ],
+      data: stage_impact.circular,
       backgroundColor: 'rgba(74, 222, 128, 0.5)',
       borderColor: 'rgba(74, 222, 128, 1)',
       borderWidth: 1,
@@ -488,29 +679,25 @@ const Dashboard = ({
       hoverOffset: 4,
     }, ],
   };
+  
+  // --- Download Report Logic (Calls Node API, which calls Python) ---
 
   const downloadReport = async () => {
-    setMessage({ text: 'Generating report...', type: 'info' });
+    setMessage({ text: 'Generating PDF report...', type: 'info' });
     try {
+      // Data structure matching the Python ReportData Pydantic model
       const payload = {
-        linear: {
-          CO2_total_kg: results.linear.co2_total,
-          Energy_total_MJ: results.linear.Energy_total_MJ,
-          Cost_total_USD: results.linear.cost_total,
-          Circularity: results.linear.Circularity
-        },
-        circular: {
-          CO2_total_kg: results.circular.co2_total,
-          Energy_total_MJ: results.circular.Energy_total_MJ,
-          Cost_total_USD: results.circular.cost_total,
-          Circularity: results.circular.Circularity
-        },
-        recommendations: results.recommendations
+        linear: results.linear,
+        circular: results.circular,
+        recommendations: results.recommendations,
+        stage_impact: results.stage_impact,
       };
       
       const response = await axios.post('/api/report', payload, {
-        responseType: 'blob' // Important for downloading binary data
+        responseType: 'blob' // Expecting binary data (PDF)
       });
+
+      // Trigger the file download (standard browser trick)
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -518,12 +705,19 @@ const Dashboard = ({
       document.body.appendChild(link);
       link.click();
       link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
       setMessage({ text: 'Report downloaded successfully!', type: 'success' });
     } catch (error) {
-      console.error('Report download failed:', error);
-      setMessage({ text: 'Failed to download report. Please try again.', type: 'error' });
+      console.error('Report download failed:', error.response ? error.response.data : error.message);
+      setMessage({ text: 'Failed to download report. Check backend/Python logs.', type: 'error' });
     }
   };
+
+  // --- JSX Render ---
+
+  const co2Reduction = ((1 - (circular.co2_total / linear.co2_total)) * 100).toFixed(1);
+  const costSavings = (linear.cost_total - circular.cost_total).toFixed(2); 
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
@@ -532,26 +726,29 @@ const Dashboard = ({
           Simulation Results Dashboard
         </h1>
         <MessageBanner message={message.text} type={message.type} />
+        
+        {/* Executive Summary Stats */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
           <StatCard
             title="CO₂ Reduction"
-            value={`${((1 - (circular.co2_total / linear.co2_total)) * 100).toFixed(1)}%`}
+            value={`${co2Reduction}%`}
             color="text-green-400"
           />
           <StatCard
             title="Cost Savings"
-            value={`$${(linear.cost_total - circular.co2_total).toFixed(2)}`}
+            value={`$${costSavings}`}
             color="text-teal-400"
           />
           <StatCard
-            title="Circularity Score"
-            value="0.78"
+            title="Circularity Score (MCI)"
+            value={circular.Circularity.toFixed(2)}
             color="text-sky-400"
           />
         </div>
 
+        {/* Charts */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-          <ChartCard title="Total Impact (CO₂ & Cost)">
+          <ChartCard title="Total Impact Comparison (CO₂ & Cost)">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <h3 className="text-center font-semibold mb-2 text-lg">Total CO₂</h3>
@@ -566,11 +763,12 @@ const Dashboard = ({
           <ChartCard title="Stage-wise Impact Comparison">
             <Bar data={stageImpactData} />
           </ChartCard>
-          <ChartCard title="Material Flow (Simulated)">
+          <ChartCard title="Material Flow (Input Mix)">
             <Pie data={materialFlowData} />
           </ChartCard>
         </div>
 
+        {/* Recommendations */}
         <div className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8">
           <h2 className="text-2xl font-semibold mb-4 text-emerald-400">AI-Driven Recommendations</h2>
           <div className="grid md:grid-cols-2 gap-4">
@@ -580,6 +778,7 @@ const Dashboard = ({
           </div>
         </div>
 
+        {/* Control Buttons */}
         <div className="flex justify-center gap-4">
           <button
             onClick={onBack}
@@ -591,7 +790,7 @@ const Dashboard = ({
             onClick={downloadReport}
             className="px-6 py-3 text-lg font-semibold rounded-full bg-teal-500 hover:bg-teal-600 transition-colors duration-300"
           >
-            Download Report (PDF/Excel)
+            Download Report (PDF)
           </button>
         </div>
       </div>
@@ -633,7 +832,27 @@ const RecommendationCard = ({
 function App() {
   const [currentPage, setCurrentPage] = useState('landing');
   const [simulationResults, setSimulationResults] = useState(null);
+  const [companyDefaults, setCompanyDefaults] = useState({});
+  const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
+  // Fetch company defaults on component mount
+  useEffect(() => {
+    const fetchDefaults = async () => {
+        try {
+            const response = await axios.get(`/api/defaults/${COMPANY_ID}`);
+            // If response is not empty, use it. Otherwise, defaults remain {} (system default)
+            if (Object.keys(response.data).length > 0) {
+                setCompanyDefaults(response.data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch company defaults:', error);
+        } finally {
+            setDefaultsLoaded(true);
+        }
+    };
+    fetchDefaults();
+  }, []); 
+  
   const handleStart = () => {
     setCurrentPage('form');
   };
@@ -651,10 +870,22 @@ function App() {
   return (
     <div className="bg-gray-900 min-h-screen">
       {currentPage === 'landing' && <LandingPage onStart={handleStart} />}
-      {currentPage === 'form' && <LCAForm onSimulate={handleSimulate} />}
+      {currentPage === 'form' && (
+        <div className="max-w-7xl mx-auto pt-8">
+            <CompanyDefaultsForm 
+                onSetDefaults={setCompanyDefaults} 
+                defaults={companyDefaults}
+                isLoaded={defaultsLoaded}
+            />
+            <LCAForm 
+                onSimulate={handleSimulate}
+                companyDefaults={companyDefaults}
+            />
+        </div>
+      )}
       {currentPage === 'dashboard' && simulationResults && <Dashboard results={simulationResults} onBack={handleBack} />}
     </div>
   );
-}
+  }
 
 export default App;
