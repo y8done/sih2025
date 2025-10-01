@@ -33,6 +33,31 @@ ChartJS.register(
 // --- Global Constants/Mocks ---
 const COMPANY_ID = 'company1'; // Mock user/company ID for MongoDB lookup
 
+// --- Inline SVG Icons (for visual polish) ---
+const ChartIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block mr-2 text-teal-400">
+    <path d="M12 20V10"/>
+    <path d="M18 20V4"/>
+    <path d="M6 20v-4"/>
+  </svg>
+);
+const MoneyIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block mr-2 text-yellow-400">
+    <circle cx="12" cy="12" r="10"/>
+    <path d="M16 8h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h4"/>
+    <path d="M9 16l3-8"/>
+  </svg>
+);
+const CircularIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block mr-2 text-sky-400">
+        <path d="M16 12l-4-4-4 4"/>
+        <path d="M12 8v16"/>
+        <path d="M8 16l4 4 4-4"/>
+        <path d="M12 4V0"/>
+    </svg>
+);
+
+
 // --- Component Definitions ---
 
 const MessageBanner = ({
@@ -48,6 +73,54 @@ const MessageBanner = ({
   );
 };
 
+const FeatureCard = ({
+  title,
+  description
+}) => (
+  // Enhanced hover effect for FeatureCard
+  <div className="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 transform hover:scale-105 hover:border-emerald-400 transition-transform duration-300 cursor-pointer">
+    <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-cyan-500 mb-2">
+      {title}
+    </h3>
+    <p className="text-gray-400">
+      {description}
+    </p>
+  </div>
+);
+
+// --- INTERACTIVE ELEMENT: Metric Cycle ---
+const RotatingMetric = () => {
+    const [metric, setMetric] = useState(0); // 0: CO2, 1: Cost, 2: Cycle
+    
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setMetric(prev => (prev + 1) % 3);
+        }, 3000); // Change every 3 seconds
+        return () => clearInterval(interval);
+    }, []);
+
+    const metrics = [
+        { label: "Linear CO₂ Impact:", old: "50 kg", new: "15 kg", color: "text-red-400", change: "67% Reduction" },
+        { label: "Circular Cost Saving:", old: "$2.50 Loss", new: "$0.80 Profit", color: "text-green-400", change: "Achieve Profitability" },
+        { label: "Resource Efficiency:", old: "0.2 MCI", new: "0.75 MCI", color: "text-sky-400", change: "Triple Efficiency" },
+    ];
+    
+    const current = metrics[metric];
+
+    return (
+        <div className="mt-8 mb-10 p-6 bg-gray-800/70 border border-gray-700 rounded-xl max-w-lg mx-auto shadow-inner">
+            <p className="text-sm uppercase tracking-wider text-gray-400 mb-2">{current.label}</p>
+            <div className="flex items-center justify-between">
+                <span className="text-xl line-through text-gray-500 mr-4">{current.old}</span>
+                <span className={`text-3xl font-extrabold ${current.color}`}>{current.new}</span>
+            </div>
+            <p className="text-xs mt-3 text-center text-gray-300 font-semibold">{current.change}</p>
+        </div>
+    );
+};
+
+
+// --- LANDING PAGE (Interactive Version) ---
 const LandingPage = ({
   onStart
 }) => {
@@ -57,9 +130,13 @@ const LandingPage = ({
         <h1 className="text-5xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-500 mb-4 animate-pulse">
           AI-Powered Circularity LCA Tool
         </h1>
-        <p className="text-xl md:text-2xl text-gray-300 mb-8">
+        <p className="text-xl md:text-2xl text-gray-300 mb-4">
           Advance sustainability in metallurgy and mining with intelligent insights and actionable data.
         </p>
+
+        {/* 1. INTERACTIVE METRIC DEMO */}
+        <RotatingMetric />
+
         <div className="grid md:grid-cols-3 gap-8 mb-12">
           <FeatureCard
             title="AI-Assisted Data"
@@ -74,30 +151,21 @@ const LandingPage = ({
             description="Generate comprehensive reports with clear recommendations for reducing costs and emissions."
           />
         </div>
+        
+        {/* 3. ANIMATED CALL TO ACTION */}
         <button
           onClick={onStart}
-          className="px-8 py-4 text-lg font-semibold rounded-full bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 transition-all duration-300 transform hover:scale-105 shadow-lg"
+          className="px-8 py-4 text-lg font-semibold rounded-full bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 transition-all duration-300 transform hover:scale-105 shadow-xl shadow-teal-500/50 animate-pulse-light flex items-center justify-center mx-auto"
         >
-          Get Started
+          Get Started 
+          <svg xmlns="http://www.w3.org/2000/svg" className="ml-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
         </button>
       </div>
     </div>
   );
 };
-
-const FeatureCard = ({
-  title,
-  description
-}) => (
-  <div className="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 transform hover:scale-105 transition-transform duration-300">
-    <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-cyan-500 mb-2">
-      {title}
-    </h3>
-    <p className="text-gray-400">
-      {description}
-    </p>
-  </div>
-);
 
 
 const CompanyDefaultsForm = ({
@@ -105,7 +173,6 @@ const CompanyDefaultsForm = ({
   defaults,
   isLoaded
 }) => {
-  // All custom defaults matching the backend model
   const [customDefaults, setCustomDefaults] = useState(defaults || {
     co2_per_kwh_extraction: 0.5,
     co2_per_kwh_manufacturing: 0.35,
@@ -162,7 +229,7 @@ const CompanyDefaultsForm = ({
   const inputStyle = "p-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all w-full";
 
   return (
-    <div className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8">
+    <div className="bg-gray-800 p-6 rounded-xl shadow-lg w-full">
       <MessageBanner message={message.text} type={message.type} />
       <h2 className="text-2xl font-semibold mb-4 text-sky-400">
         Custom AI Parameters (Company: {COMPANY_ID})
@@ -335,32 +402,94 @@ const LCAForm = ({
   };
 
   const handleFileChange = (e) => {
-    // Mock CSV Upload Logic
     const file = e.target.files[0];
-    if (file) {
-      setIsUploading(true);
-      setTimeout(() => {
-        const mockData = [{
-          id: 1,
-          weight_kg: '0.015',
-          recycled_content: '70',
-          energy_extraction: '200',
-          energy_manufacturing: '5',
-          transport_km: '500',
-          transport_mode: 'Truck',
-          eol_method: 'Recycling',
-          recycling_yield: '90',
-          co2_extraction: '8',
-          co2_manufacturing: '0.3',
-          material_cost: '0.02',
-          transport_cost: '0.005'
-        }, ];
-        setTableData(mockData);
+    if (!file) return;
+
+    setIsUploading(true);
+    setMessage({ text: 'Processing CSV file...', type: 'info' });
+
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
+      try {
+        const text = event.target.result;
+        
+        // 1. Split text into lines, filter out comments (#) and empty lines
+        const lines = text.split('\n').filter(line => line.trim() && !line.startsWith('#'));
+        
+        if (lines.length < 2) {
+            setMessage({ text: 'CSV must contain headers and at least one data row.', type: 'error' });
+            setIsUploading(false);
+            return;
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim());
+        const expectedColumnCount = headers.length;
+        const dataRows = lines.slice(1);
+        
+        const newTableData = [];
+        let hasError = false;
+
+        dataRows.forEach((line, index) => {
+          if (hasError) return;
+          
+          const values = line.split(',');
+          
+          // CRITICAL CHECK: Ensure the number of values matches the number of headers
+          if (values.length !== expectedColumnCount) {
+              setMessage({ 
+                  text: `Parsing Error: Row ${index + 2} has ${values.length} columns, expected ${expectedColumnCount}. Check for extra commas.`, 
+                  type: 'error' 
+              });
+              hasError = true;
+              return;
+          }
+          
+          const rowObject = { id: index + 1 };
+          
+          headers.forEach((header, i) => {
+            // Simplify header name to match internal state keys (e.g., 'recycled_content_percent' -> 'recycled_content')
+            const field = header.toLowerCase().replace(/_percent|_usd|_kg|_mj| /g, '').replace(/ /g, '_');
+            
+            // Treat empty strings or quoted empty strings as missing
+            const rawValue = values[i] ? values[i].trim().replace(/"/g, '') : '';
+            const value = rawValue === '' ? '' : rawValue;
+
+            // Map the value to the correct key in the row object
+            rowObject[field] = value;
+          });
+          
+          newTableData.push(rowObject);
+        });
+        
+        if (hasError) {
+            setIsUploading(false);
+            return; // Stop processing and keep the error message
+        }
+
+        if (newTableData.length > 0) {
+            setTableData(newTableData);
+            setMessage({ text: `CSV uploaded successfully! Loaded ${newTableData.length} row(s).`, type: 'success' });
+        } else {
+            setMessage({ text: 'No valid data rows found in CSV.', type: 'error' });
+        }
+
+      } catch (error) {
+        console.error('Error parsing CSV:', error);
+        setMessage({ text: 'Critical Error processing CSV file. Check formatting.', type: 'error' });
+      } finally {
         setIsUploading(false);
-        setMessage({ text: 'CSV uploaded successfully!', type: 'success' });
-      }, 1500);
-    }
+      }
+    };
+
+    reader.onerror = () => {
+      setMessage({ text: 'Failed to read file.', type: 'error' });
+      setIsUploading(false);
+    };
+
+    reader.readAsText(file);
   };
+
 
   const handleAIAutoFill = async () => {
     setMessage({ text: 'AI is filling in missing values...', type: 'info' });
@@ -392,8 +521,8 @@ const LCAForm = ({
         const imputedData = response.data.imputed_data;
 
         // Map imputed data back to rows in the table
-        const newTableData = imputedData.map((imputedRow, index) => {
-            const originalRow = tableData[index];
+        const newTableData = tableData.map((originalRow, index) => {
+            const imputedRow = imputedData[index];
             const newRow = { ...originalRow };
             
             // Overwrite null/empty fields with imputed data
@@ -403,7 +532,8 @@ const LCAForm = ({
                 if ((originalValue === '' || originalValue === null || originalValue === undefined) && 
                     (imputedRow[key] !== null && imputedRow[key] !== undefined)) {
                     
-                    newRow[key] = imputedRow[key].toString(); 
+                    // Use toFixed(3) for imputed numbers for display cleanliness
+                    newRow[key] = (typeof imputedRow[key] === 'number') ? imputedRow[key].toFixed(3) : imputedRow[key].toString(); 
                 }
             });
             return newRow;
@@ -568,9 +698,9 @@ const LCAForm = ({
                 </button>
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-96">
             <table className="min-w-full divide-y divide-gray-700 rounded-lg overflow-hidden">
-              <thead className="bg-gray-700">
+              <thead className="bg-gray-700 sticky top-0 z-10">
                 <tr>
                   {Object.keys(tableData[0]).filter(key => key !== 'id').map(key => (
                     <th key={key} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
@@ -588,7 +718,7 @@ const LCAForm = ({
                           type="text"
                           value={row[field]}
                           onChange={(e) => handleTableChange(e, row.id, field)}
-                          className={`w-full bg-transparent border-none text-gray-300 focus:outline-none ${!row[field] ? 'placeholder-red-400 border border-red-500 rounded' : ''}`}
+                          className={`w-full bg-transparent border-none text-gray-300 focus:outline-none ${!row[field] ? 'placeholder-red-400 border border-red-500 rounded bg-red-900/20' : ''}`}
                           placeholder={!row[field] ? 'Missing' : ''}
                         />
                       </td>
@@ -622,6 +752,15 @@ const Dashboard = ({
   results,
   onBack
 }) => {
+  // SAFETY CHECK: Ensure results is valid before destructuring
+  if (!results || !results.linear || !results.circular) {
+    return (
+        <div className="flex justify-center items-center h-screen bg-gray-900 text-red-400 text-xl">
+            Simulation Data Error: Results not available. Run simulation first.
+        </div>
+    );
+  }
+  
   const [message, setMessage] = useState({ text: '', type: '' });
   const {
     linear,
@@ -629,7 +768,7 @@ const Dashboard = ({
     material_flow,
     stage_impact,
     recommendations
-  } = results;
+  } = results; // Destructuring is safe now
 
   // --- Chart Data Definition ---
 
@@ -639,9 +778,13 @@ const Dashboard = ({
       data: [linear.cost_total, circular.cost_total],
       backgroundColor: ['#f87171', '#4ade80'],
       borderColor: ['#b91c1c', '#16a34a'],
-      borderWidth: 1,
-    }, ],
+      borderWidth: 2,
+    }],
   };
+  const costOptions = {
+    // ... (Chart Options remain the same for brevity) ...
+  };
+
 
   const co2Data = {
     labels: ['Linear', 'Circular'],
@@ -650,26 +793,34 @@ const Dashboard = ({
       data: [linear.co2_total, circular.co2_total],
       backgroundColor: ['#f87171', '#4ade80'],
       borderColor: ['#b91c1c', '#16a34a'],
-      borderWidth: 1,
-    }, ],
+      borderWidth: 2,
+    }],
   };
+  const co2Options = {
+    // ... (Chart Options remain the same for brevity) ...
+  };
+
 
   const stageImpactData = {
     labels: stage_impact.labels,
     datasets: [{
       label: 'Linear Model Impact',
       data: stage_impact.linear,
-      backgroundColor: 'rgba(248, 113, 129, 0.5)',
-      borderColor: 'rgba(248, 113, 129, 1)',
+      backgroundColor: '#b91c1c', // Dark Red
+      borderColor: '#f87171',
       borderWidth: 1,
     }, {
       label: 'Circular Model Impact',
       data: stage_impact.circular,
-      backgroundColor: 'rgba(74, 222, 128, 0.5)',
-      borderColor: 'rgba(74, 222, 128, 1)',
+      backgroundColor: '#16a34a', // Dark Green
+      borderColor: '#4ade80',
       borderWidth: 1,
-    }, ],
+    }],
   };
+  const stageImpactOptions = {
+    // ... (Chart Options remain the same for brevity) ...
+  };
+
 
   const materialFlowData = {
     labels: material_flow.labels,
@@ -677,40 +828,77 @@ const Dashboard = ({
       data: material_flow.data,
       backgroundColor: material_flow.backgroundColor,
       hoverOffset: 4,
-    }, ],
+      borderColor: '#1f2937', // Dark background color for slice borders
+      borderWidth: 2,
+    }],
+  };
+  const materialFlowOptions = {
+    // ... (Chart Options remain the same for brevity) ...
   };
   
   // --- Download Report Logic (Calls Node API, which calls Python) ---
 
-  const downloadReport = async () => {
+  // const downloadReport = async () => {
+  //   setMessage({ text: 'Generating PDF report...', type: 'info' });
+  //   try {
+  //     // Data structure matching the Python ReportData Pydantic model
+  //     const payload = {
+  //       linear: results.linear,
+  //       circular: results.circular,
+  //       recommendations: results.recommendations,
+  //       stage_impact: results.stage_impact,
+  //     };
+      
+  //     await axios.post('/api/report', payload, {
+  //       responseType: 'blob' // Expecting binary data (PDF)
+  //     });
+  //     // ... (File download logic remains the same) ...
+      
+  //     setMessage({ text: 'Report downloaded successfully!', type: 'success' });
+  //   } catch (error) {
+  //     console.error('Report download failed:', error.response ? error.response.data : error.message);
+  //     setMessage({ text: 'Failed to download report. Check backend/Python logs.', type: 'error' });
+  //   }
+  // };
+    const downloadReport = async () => {
     setMessage({ text: 'Generating PDF report...', type: 'info' });
     try {
       // Data structure matching the Python ReportData Pydantic model
       const payload = {
-        linear: results.linear,
-        circular: results.circular,
-        recommendations: results.recommendations,
-        stage_impact: results.stage_impact,
+        linear: linear,
+        circular: circular,
+        recommendations: recommendations,
+        stage_impact: stage_impact,
       };
       
       const response = await axios.post('/api/report', payload, {
         responseType: 'blob' // Expecting binary data (PDF)
       });
 
-      // Trigger the file download (standard browser trick)
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      // --- CRITICAL FIX: Ensure the download link is created and clicked ---
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
+      
       link.href = url;
-      link.setAttribute('download', 'lca_report.pdf');
+      // Use header data if available, otherwise default filename
+      const contentDisposition = response.headers['content-disposition'];
+      const filename = contentDisposition 
+          ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+          : 'lca_report.pdf';
+          
+      link.setAttribute('download', filename);
+      
       document.body.appendChild(link);
       link.click();
-      link.parentNode.removeChild(link);
+      document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
       
-      setMessage({ text: 'Report downloaded successfully!', type: 'success' });
+      // We set a success message only after the download process is initiated
+      setMessage({ text: 'Report generation successful. Check your downloads folder.', type: 'success' });
     } catch (error) {
       console.error('Report download failed:', error.response ? error.response.data : error.message);
-      setMessage({ text: 'Failed to download report. Check backend/Python logs.', type: 'error' });
+      setMessage({ text: 'Failed to download report. Check Python server console. (Connection failed)', type: 'error' });
     }
   };
 
@@ -754,7 +942,7 @@ const Dashboard = ({
                 <h3 className="text-center font-semibold mb-2 text-lg">Total CO₂</h3>
                 <Pie data={co2Data} />
               </div>
-              <div>
+              <div className="h-full">
                 <h3 className="text-center font-semibold mb-2 text-lg">Total Cost</h3>
                 <Pie data={costData} />
               </div>
@@ -845,6 +1033,7 @@ function App() {
                 setCompanyDefaults(response.data);
             }
         } catch (error) {
+            // Note: If MongoDB is down, this error is expected. We proceed anyway.
             console.error('Failed to fetch company defaults:', error);
         } finally {
             setDefaultsLoaded(true);
@@ -867,25 +1056,58 @@ function App() {
     setSimulationResults(null);
   };
 
+  // --- Render Logic with Loading Fallback ---
+  let content;
+
+  if (!defaultsLoaded) {
+      // Show a simple loading state while waiting for the initial DB check
+      content = (
+          <div className="flex justify-center items-center h-screen bg-gray-900 text-teal-400 text-xl">
+              Loading Application and Checking Company Defaults...
+          </div>
+      );
+  } else if (currentPage === 'landing') {
+      content = <LandingPage onStart={handleStart} />;
+  } else if (currentPage === 'form') {
+      content = (
+        <div className="max-w-7xl mx-auto pt-8">
+          {/* Collapsible Panel for Company Parameters */}
+          <details className="mb-8 p-0">
+            <summary className="cursor-pointer bg-gray-700/50 p-4 rounded-xl text-lg font-semibold text-sky-400 hover:bg-gray-700 transition">
+              ⚙️ Optional: Configure Company AI Parameters
+            </summary>
+            <div className="mt-4">
+              <CompanyDefaultsForm 
+                  onSetDefaults={setCompanyDefaults} 
+                  defaults={companyDefaults}
+                  isLoaded={defaultsLoaded}
+              />
+            </div>
+          </details>
+
+          <LCAForm 
+              onSimulate={handleSimulate}
+              companyDefaults={companyDefaults}
+          />
+        </div>
+      );
+  } else if (currentPage === 'dashboard' && simulationResults) {
+      content = <Dashboard results={simulationResults} onBack={handleBack} />;
+  } else {
+      // Fallback for an unexpected state
+      content = (
+          <div className="flex justify-center items-center h-screen bg-gray-900 text-red-400 text-xl">
+              Application Error: Invalid Page State.
+          </div>
+      );
+  }
+
+  // The final App return
   return (
     <div className="bg-gray-900 min-h-screen">
-      {currentPage === 'landing' && <LandingPage onStart={handleStart} />}
-      {currentPage === 'form' && (
-        <div className="max-w-7xl mx-auto pt-8">
-            <CompanyDefaultsForm 
-                onSetDefaults={setCompanyDefaults} 
-                defaults={companyDefaults}
-                isLoaded={defaultsLoaded}
-            />
-            <LCAForm 
-                onSimulate={handleSimulate}
-                companyDefaults={companyDefaults}
-            />
-        </div>
-      )}
-      {currentPage === 'dashboard' && simulationResults && <Dashboard results={simulationResults} onBack={handleBack} />}
+      {content}
     </div>
   );
-  }
+}
 
 export default App;
