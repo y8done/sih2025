@@ -245,15 +245,26 @@ const LCAForm = ({ onSimulate, companyDefaults, simulationStatus, setSimulationS
       setMessage({ text: 'AI imputation failed. Check Python server console.', type: 'error' });
     }
   };
-  const runSimulation = async () => {
+const runSimulation = async () => {
     setSimulationStatus('running');
     setMessage({ text: 'Running simulation...', type: 'info' });
+
+    // ... (payload setup code is the same)
     const payload = {
       project_metadata: formData,
       data: tableData.map(row => ({
-        weight_kg: parseFloat(row.weight_kg) || null, recycled_content: parseFloat(row.recycled_content) || null, energy_extraction: parseFloat(row.energy_extraction) || null, energy_manufacturing: parseFloat(row.energy_manufacturing) || null,
-        transport_km: parseFloat(row.transport_km) || null, transport_mode: row.transport_mode || null, recycling_yield: parseFloat(row.recycling_yield) || null, co2_extraction: parseFloat(row.co2_extraction) || null,
-        co2_manufacturing: parseFloat(row.co2_manufacturing) || null, material_cost: parseFloat(row.material_cost) || null, transport_cost: parseFloat(row.transport_cost) || null, eol_method: row.eol_method || null,
+        weight_kg: parseFloat(row.weight_kg) || null,
+        recycled_content: parseFloat(row.recycled_content) || null,
+        energy_extraction: parseFloat(row.energy_extraction) || null,
+        energy_manufacturing: parseFloat(row.energy_manufacturing) || null,
+        transport_km: parseFloat(row.transport_km) || null,
+        transport_mode: row.transport_mode || null,
+        recycling_yield: parseFloat(row.recycling_yield) || null,
+        co2_extraction: parseFloat(row.co2_extraction) || null,
+        co2_manufacturing: parseFloat(row.co2_manufacturing) || null,
+        material_cost: parseFloat(row.material_cost) || null,
+        transport_cost: parseFloat(row.transport_cost) || null,
+        eol_method: row.eol_method || null,
       })),
       custom_defaults: companyDefaults && companyDefaults.co2_per_kwh_extraction ? companyDefaults : null
     };
@@ -261,24 +272,44 @@ const LCAForm = ({ onSimulate, companyDefaults, simulationStatus, setSimulationS
     await new Promise(resolve => setTimeout(resolve, 3500));
 
     try {
-      const response = await axios.post('/api/simulate', payload);
-      const { results } = response.data;
-      const frontEndResults = {
-        linear: { co2_total: results.linear.CO2_total_kg, cost_total: results.linear.Cost_total_USD, Circularity: results.linear.Circularity.MCI },
-        circular: { co2_total: results.circular.CO2_total_kg, cost_total: results.circular.Cost_total_USD, Circularity: results.circular.Circularity.MCI },
-        material_flow: { labels: ['Virgin', 'Recycled', 'Loss'], data: [results.circular.Virgin_Input_percent || 30, results.circular.Recycled_Input_percent || 60, 10], backgroundColor: ['#fb923c', '#34d399', '#94a3b8'] },
-        stage_impact: { labels: ['Extraction', 'Processing', 'Transport', 'EoL'], linear: [results.linear.CO2_total_kg * 0.4, results.linear.CO2_total_kg * 0.3, results.linear.CO2_total_kg * 0.2, results.linear.CO2_total_kg * 0.1], circular: [results.circular.CO2_total_kg * 0.25, results.circular.CO2_total_kg * 0.3, results.circular.CO2_total_kg * 0.25, results.circular.CO2_total_kg * 0.2] },
-        recommendations: [{ title: 'Optimal Scenario', text: results.recommendation }, { title: 'Increase Recycled Content', text: `Based on your data, increasing recycled content could further reduce CO₂ emissions and improve the Circularity Score of ${results.circular.Circularity.MCI.toFixed(2)}.` }],
-      };
-      onSimulate(frontEndResults);
-      setMessage({ text: 'Simulation completed successfully!', type: 'success' });
+        const response = await axios.post('/api/simulate', payload);
+        const { results } = response.data;
+
+        // --- FIX STARTS HERE ---
+        // Pass the results directly without restructuring them. This preserves the
+        // original keys like "CO2_total_kg" and "Cost_total_USD".
+        const frontEndResults = {
+            linear: results.linear, // Use the object directly
+            circular: results.circular, // Use the object directly
+            material_flow: {
+                labels: ['Virgin', 'Recycled', 'Loss'],
+                data: [results.circular.Virgin_Input_percent || 30, results.circular.Recycled_Input_percent || 60, 10],
+                backgroundColor: ['#fb923c', '#34d399', '#94a3b8']
+            },
+            stage_impact: {
+                labels: ['Extraction', 'Processing', 'Transport', 'EoL'],
+                linear: [results.linear.CO2_total_kg * 0.4, results.linear.CO2_total_kg * 0.3, results.linear.CO2_total_kg * 0.2, results.linear.CO2_total_kg * 0.1],
+                circular: [results.circular.CO2_total_kg * 0.25, results.circular.CO2_total_kg * 0.3, results.circular.CO2_total_kg * 0.25, results.circular.CO2_total_kg * 0.2]
+            },
+            recommendations: [{
+                title: 'Optimal Scenario',
+                text: results.recommendation
+            }, {
+                title: 'Increase Recycled Content',
+                text: `Based on your data, increasing recycled content could further reduce CO₂ emissions and improve the Circularity Score of ${results.circular.Circularity.MCI.toFixed(2)}.`
+            }],
+        };
+        // --- FIX ENDS HERE ---
+
+        onSimulate(frontEndResults);
+        setMessage({ text: 'Simulation completed successfully!', type: 'success' });
     } catch (error) {
-      console.error('Simulation failed:', error.response ? error.response.data : error.message);
-      setMessage({ text: 'Failed to run simulation. Check Python server console.', type: 'error' });
+        console.error('Simulation failed:', error.response ? error.response.data : error.message);
+        setMessage({ text: 'Failed to run simulation. Check Python server console.', type: 'error' });
     } finally {
-      setSimulationStatus('completed');
+        setSimulationStatus('completed');
     }
-  };
+};
 
   const inputStyle = "w-full p-3 bg-white/5 border border-white/10 rounded-md text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition-all";
   const tableInputStyle = "w-full bg-transparent border-none text-slate-200 focus:outline-none";
@@ -332,137 +363,207 @@ const LCAForm = ({ onSimulate, companyDefaults, simulationStatus, setSimulationS
 };
 
 const Dashboard = ({ results, onBack }) => {
-  const [message, setMessage] = useState({ text: '', type: '' });
+  const [message, setMessage] = useState({ text: "", type: "" });
   if (!results || !results.linear || !results.circular) {
-    return <div className="text-red-400 text-center p-8">Simulation Data Error. Please run a new simulation.</div>;
+    return (
+      <div className="text-red-400 text-center p-8">
+        Simulation Data Error. Please run a new simulation.
+      </div>
+    );
   }
-  const { linear, circular, material_flow, stage_impact, recommendations } = results;
+  const { linear, circular, material_flow, stage_impact, recommendations } =
+    results;
 
   const downloadReport = async () => {
-    setMessage({ text: 'Generating PDF report...', type: 'info' });
-    // Log the data being sent to the backend for debugging
-    console.log("Data for report:", { linear, circular, recommendations, stage_impact });
+    setMessage({ text: "Generating PDF report...", type: "info" });
+    console.log("Data for report:", {
+      linear,
+      circular,
+      recommendations,
+      stage_impact,
+    });
     try {
       const payload = { linear, circular, recommendations, stage_impact };
-      const response = await axios.post('/api/report', payload, { responseType: 'blob' });
-      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const response = await axios.post("/api/report", payload, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
-      const contentDisposition = response.headers['content-disposition'];
-      const filename = contentDisposition ? contentDisposition.split('filename=')[1].replace(/"/g, '') : 'lca_report.pdf';
-      link.setAttribute('download', filename);
+      const contentDisposition = response.headers["content-disposition"];
+      const filename = contentDisposition
+        ? contentDisposition.split("filename=")[1].replace(/"/g, "")
+        : "lca_report.pdf";
+      link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      setMessage({ text: 'Report generation successful. Check downloads.', type: 'success' });
+      setMessage({
+        text: "Report generation successful. Check downloads.",
+        type: "success",
+      });
     } catch (error) {
-      console.error('Report download failed:', error);
-      const errorText = 'Failed to generate report. Ensure the backend is running and check the server console for errors.';
-      setMessage({ text: errorText, type: 'error' });
-      alert(errorText); // Use alert as a fallback for critical errors
+      console.error("Report download failed:", error);
+      const errorText =
+        "Failed to generate report. Ensure the backend is running and check the server console for errors.";
+      setMessage({ text: errorText, type: "error" });
+      alert(errorText);
     }
   };
 
-  const co2Reduction = linear.co2_total ? ((1 - (circular.co2_total / linear.co2_total)) * 100).toFixed(1) : 0;
-  const costSavings = (linear.cost_total - circular.cost_total).toFixed(2);
+  // --- FIX 1: Use the correct keys from the Python API ---
+  const co2Reduction = linear.CO2_total_kg
+    ? ((1 - circular.CO2_total_kg / linear.CO2_total_kg) * 100).toFixed(1)
+    : 0;
+  const costSavings = (
+    linear.Cost_total_USD - circular.Cost_total_USD
+  ).toFixed(2);
 
   const commonChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-        legend: {
-            position: 'top',
-            labels: { color: '#cbd5e1' }
-        }
+      legend: {
+        position: "top",
+        labels: { color: "#cbd5e1" },
+      },
     },
     scales: {
-        x: {
-            ticks: { color: '#94a3b8' },
-            grid: { color: 'rgba(255, 255, 255, 0.1)' }
-        },
-        y: {
-            ticks: { color: '#94a3b8' },
-            grid: { color: 'rgba(255, 255, 255, 0.1)' }
-        }
-    }
+      x: {
+        ticks: { color: "#94a3b8" },
+        grid: { color: "rgba(255, 255, 255, 0.1)" },
+      },
+      y: {
+        ticks: { color: "#94a3b8" },
+        grid: { color: "rgba(255, 255, 255, 0.1)" },
+      },
+    },
   };
-  
+
   const totalImpactData = {
-      labels: ['Extraction', 'Manufacturing', 'Transport', 'End-of-Life'],
-      datasets: [
-          {
-              label: 'Linear CO2 (kg)',
-              data: [45.2, 28.7, 12.1, 8.3],
-              backgroundColor: '#1FB8CD',
-          },
-          {
-              label: 'Circular CO2 (kg)',
-              data: [13.6, 15.2, 6.1, 4.9],
-              backgroundColor: '#5D878F',
-          },
-      ]
+    labels: ["Extraction", "Manufacturing", "Transport", "End-of-Life"],
+    datasets: [
+      {
+        label: "Linear CO2 (kg)",
+        data: [45.2, 28.7, 12.1, 8.3],
+        backgroundColor: "#1FB8CD",
+      },
+      {
+        label: "Circular CO2 (kg)",
+        data: [13.6, 15.2, 6.1, 4.9],
+        backgroundColor: "#5D878F",
+      },
+    ],
   };
 
   const stageImpactData = {
-    labels: ['Extraction', 'Manufacturing', 'Transport', 'End-of-Life'],
-    datasets: [{
-      data: [35, 40, 15, 10],
-      backgroundColor: ['#1FB8CD', '#FFC185', '#B4413C', '#ECEBD5'],
-      borderColor: '#0f172a',
-      borderWidth: 4,
-    }]
+    labels: ["Extraction", "Manufacturing", "Transport", "End-of-Life"],
+    datasets: [
+      {
+        data: [35, 40, 15, 10],
+        backgroundColor: ["#1FB8CD", "#FFC185", "#B4413C", "#ECEBD5"],
+        borderColor: "#0f172a",
+        borderWidth: 4,
+      },
+    ],
   };
 
   const materialFlowData = {
-      labels: ['Raw Material', 'Production', 'Use Phase', 'End-of-Life'],
-      datasets: [
-          {
-              label: 'Material Input (%)',
-              data: [100, 85, 72, 68],
-              borderColor: '#1FB8CD',
-              backgroundColor: 'rgba(31, 184, 205, 0.1)',
-              fill: true,
-              tension: 0.4,
-          },
-          {
-              label: 'Recycled Content (%)',
-              data: [0, 15, 28, 32],
-              borderColor: '#5D878F',
-              backgroundColor: 'rgba(93, 135, 143, 0.1)',
-              fill: true,
-              tension: 0.4,
-          },
-      ]
+    labels: ["Raw Material", "Production", "Use Phase", "End-of-Life"],
+    datasets: [
+      {
+        label: "Material Input (%)",
+        data: [100, 85, 72, 68],
+        borderColor: "#1FB8CD",
+        backgroundColor: "rgba(31, 184, 205, 0.1)",
+        fill: true,
+        tension: 0.4,
+      },
+      {
+        label: "Recycled Content (%)",
+        data: [0, 15, 28, 32],
+        borderColor: "#5D878F",
+        backgroundColor: "rgba(93, 135, 143, 0.1)",
+        fill: true,
+        tension: 0.4,
+      },
+    ],
   };
 
   return (
     <div className="animate-fadeIn">
       <MessageBanner message={message.text} type={message.type} />
       <div className="mb-12 text-center">
-        <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">Simulation Results Dashboard</h2>
-        <p className="text-slate-300">Analysis complete. Review your key metrics and recommendations below.</p>
+        <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">
+          Simulation Results Dashboard
+        </h2>
+        <p className="text-slate-300">
+          Analysis complete. Review your key metrics and recommendations below.
+        </p>
       </div>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-        <MetricCard title="CO₂ Reduction" value={`${co2Reduction}%`} icon={<i className="fas fa-leaf"></i>} color="emerald" />
-        <MetricCard title="Cost Savings" value={`$${costSavings}`} icon={<i className="fas fa-dollar-sign"></i>} color="amber" />
-        <MetricCard title="Circularity Score" value={circular.Circularity.toFixed(2)} icon={<i className="fas fa-sync-alt"></i>} color="teal" />
+        <MetricCard
+          title="CO₂ Reduction"
+          value={`${co2Reduction}%`}
+          icon={<i className="fas fa-leaf"></i>}
+          color="emerald"
+        />
+        <MetricCard
+          title="Cost Savings"
+          value={`$${costSavings}`}
+          icon={<i className="fas fa-dollar-sign"></i>}
+          color="amber"
+        />
+        {/* --- FIX 2: Access the nested .MCI property for the score --- */}
+        <MetricCard
+          title="Circularity Score"
+          value={circular.Circularity.MCI.toFixed(2)}
+          icon={<i className="fas fa-sync-alt"></i>}
+          color="teal"
+        />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-        <ChartWrapper title="Total Impact: CO2 & Cost" className="lg:col-span-1"><Bar options={commonChartOptions} data={totalImpactData} /></ChartWrapper>
-        <ChartWrapper title="Stage-wise Impact" className="lg:col-span-1"><Doughnut options={{...commonChartOptions, cutout: '60%'}} data={stageImpactData} /></ChartWrapper>
-        <ChartWrapper title="Material Flow" className="lg:col-span-2"><Line options={commonChartOptions} data={materialFlowData} /></ChartWrapper>
+        <ChartWrapper
+          title="Total Impact: CO2 & Cost"
+          className="lg:col-span-1"
+        >
+          <Bar options={commonChartOptions} data={totalImpactData} />
+        </ChartWrapper>
+        <ChartWrapper title="Stage-wise Impact" className="lg:col-span-1">
+          <Doughnut
+            options={{ ...commonChartOptions, cutout: "60%" }}
+            data={stageImpactData}
+          />
+        </ChartWrapper>
+        <ChartWrapper title="Material Flow" className="lg:col-span-2">
+          <Line options={commonChartOptions} data={materialFlowData} />
+        </ChartWrapper>
       </div>
       <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-8 shadow-lg mb-12">
-        <h3 className="text-2xl font-bold text-white mb-6 text-center">AI Recommendations</h3>
+        <h3 className="text-2xl font-bold text-white mb-6 text-center">
+          AI Recommendations
+        </h3>
         <div className="grid md:grid-cols-2 gap-6">
-          {recommendations.map((rec, index) => (<RecommendationCard key={index} title={rec.title} text={rec.text} />))}
+          {recommendations.map((rec, index) => (
+            <RecommendationCard key={index} title={rec.title} text={rec.text} />
+          ))}
         </div>
       </div>
       <div className="flex justify-center gap-4">
-        <button onClick={onBack} className="px-8 py-3 text-lg font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors">Run New Simulation</button>
-        <button onClick={downloadReport} className="px-8 py-3 text-lg font-semibold rounded-lg bg-gradient-to-r from-teal-500 to-emerald-600 text-white hover:opacity-90 transition-opacity">Download Report (PDF)</button>
+        <button
+          onClick={onBack}
+          className="px-8 py-3 text-lg font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+        >
+          Run New Simulation
+        </button>
+        <button
+          onClick={downloadReport}
+          className="px-8 py-3 text-lg font-semibold rounded-lg bg-gradient-to-r from-teal-500 to-emerald-600 text-white hover:opacity-90 transition-opacity"
+        >
+          Download Report (PDF)
+        </button>
       </div>
     </div>
   );
