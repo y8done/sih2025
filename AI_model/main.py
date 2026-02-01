@@ -14,6 +14,7 @@ from reportlab.lib import colors
 # --- FastAPI App Initialization ---
 app = FastAPI(title="LCA Simulation and Report API")
 
+
 # Configure CORS (Crucial for frontend communication)
 app.add_middleware(
     CORSMiddleware,
