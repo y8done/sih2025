@@ -262,6 +262,45 @@ const LCAForm = ({
       setSimulationStatus('completed');
     }, 1500);
   };
+  const downloadReport = () => {
+    // Generate the report content (CSV/Text format for easy mock download)
+    const co2Reduction = ((1 - (circular.co2_total / linear.co2_total)) * 100).toFixed(1);
+    const costSavings = (linear.cost_total - circular.cost_total).toFixed(2);
+
+    const reportContent = `
+Project Report - Linear vs. Circular Metallurgy LCA
+--------------------------------------------------
+
+Summary Metrics:
+- Total CO₂ Emissions (Linear): ${linear.co2_total.toFixed(2)} kg
+- Total CO₂ Emissions (Circular): ${circular.co2_total.toFixed(2)} kg
+- CO₂ Reduction: ${co2Reduction}%
+- Total Cost (Linear): $${linear.cost_total.toFixed(2)}
+- Total Cost (Circular): $${circular.cost_total.toFixed(2)}
+- Cost Savings: $${costSavings}
+- Circularity Score (MCI): 0.78 (Simulated)
+
+AI-Driven Recommendations:
+${recommendations.map(rec => `- ${rec.title}: ${rec.text}`).join('\n')}
+
+Stage-wise Impact Comparison (Simulated Data):
+Stage,Linear Impact (kg CO2),Circular Impact (kg CO2)
+${stage_impact.labels.map((label, i) =>
+  `${label},${stage_impact.linear[i].toFixed(2)},${stage_impact.circular[i].toFixed(2)}`
+).join('\n')}
+    `;
+
+    // Create a Blob and trigger a file download
+    const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Circularity_LCA_Report.txt'; // Downloads as a simple text file
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
