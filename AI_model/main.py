@@ -6,6 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 import pandas as pd
 import io
+import sys
+import os
+
+# --- Import the AI Engine ---
+# Ensure the current directory is in the path to import sibling files
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from missing_value_model import fill_missing_values as fill_missing_values_ai
+
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -23,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Pydantic Models (Corrected for Row-Oriented Input) ---
+# --- Pydantic Models ---
 
 class LCASingleRowData(BaseModel):
     weight_kg: Optional[float] = None
@@ -55,14 +63,14 @@ class ReportData(BaseModel):
     linear: Dict[str, Any]
     circular: Dict[str, Any]
     recommendations: List[Dict[str, str]]
-    stage_impact: Dict[str, Any] # Stage impact data is passed for completeness
+    stage_impact: Dict[str, Any]
 
 # --- Utility Functions ---
 
 def get_default_imputation_values(custom_defaults: Optional[CustomDefaults]) -> Dict[str, float]:
     """Retrieves default values, prioritizing custom company parameters."""
     
-    # System Defaults (Fallback if no custom_defaults are provided)
+    # System Defaults (Fallback)
     defaults = {
         "co2_kwh_ext": 0.5,
         "co2_kwh_man": 0.35,
@@ -73,52 +81,69 @@ def get_default_imputation_values(custom_defaults: Optional[CustomDefaults]) -> 
     
     # Apply Custom Defaults if they exist
     if custom_defaults:
-        defaults["co2_kwh_ext"] = custom_defaults.co2_per_kwh_extraction if custom_defaults.co2_per_kwh_extraction is not None else defaults["co2_kwh_ext"]
-        defaults["co2_kwh_man"] = custom_defaults.co2_per_kwh_manufacturing if custom_defaults.co2_per_kwh_manufacturing is not None else defaults["co2_kwh_man"]
-        defaults["rec_yield"] = custom_defaults.recycling_yield_default if custom_defaults.recycling_yield_default is not None else defaults["rec_yield"]
-        defaults["avg_energy_ext"] = custom_defaults.avg_energy_extraction_mj if custom_defaults.avg_energy_extraction_mj is not None else defaults["avg_energy_ext"]
-        defaults["transport_cost_km"] = custom_defaults.transport_cost_per_km_default if custom_defaults.transport_cost_per_km_default is not None else defaults["transport_cost_km"]
+        if custom_defaults.co2_per_kwh_extraction is not None:
+            defaults["co2_kwh_ext"] = custom_defaults.co2_per_kwh_extraction
+        if custom_defaults.co2_per_kwh_manufacturing is not None:
+            defaults["co2_kwh_man"] = custom_defaults.co2_per_kwh_manufacturing
+        if custom_defaults.recycling_yield_default is not None:
+            defaults["rec_yield"] = custom_defaults.recycling_yield_default
+        if custom_defaults.avg_energy_extraction_mj is not None:
+            defaults["avg_energy_ext"] = custom_defaults.avg_energy_extraction_mj
+        if custom_defaults.transport_cost_per_km_default is not None:
+            defaults["transport_cost_km"] = custom_defaults.transport_cost_per_km_default
 
     return defaults
 
 
-def fill_missing_values(df: pd.DataFrame, defaults: Dict[str, float]) -> pd.DataFrame:
+def run_hybrid_imputation(df: pd.DataFrame, defaults: Dict[str, float]) -> pd.DataFrame:
     """
-    Fills missing values using both custom factors and mean imputation.
+    Combines AI (RandomForest) and Domain Rules (Company Defaults) to fill missing values.
     """
     df = df.copy()
     
-    # Rename columns to match the snake_case used in the functions below
+    # Standardize column names
     df.columns = [col.lower() for col in df.columns]
 
-    # Convert all possible numeric columns to float, coercing errors to NaN
-    # This prepares the data for imputation and prevents string-related errors later.
+    # Pre-processing: Convert numeric columns
     for col in df.columns:
         if col not in ['transport_mode', 'eol_method']:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
+    # --- Step 1: Run AI Engine (Random Forest) ---
+    # This attempts to find patterns in the data (e.g., predicting energy from weight)
+    try:
+        # fill_missing_values_ai returns (df, mask), we only need df
+        df_ai, _ = fill_missing_values_ai(df)
+        df = df_ai
+    except Exception as e:
+        print(f"AI Imputation Warning: {e}. Proceeding to fallback defaults.")
 
-    # --- Strategy 1: Factor-based Imputation (using Custom Defaults) ---
-    # Impute missing manufacturing CO2 using the custom factor (energy_manufacturing * CO2 factor)
+    # --- Step 2: Apply Company/Domain Defaults (Fallback) ---
+    # If the AI couldn't fill a value (e.g. single row input), we use the defaults.
     
-    # Impute missing energy_manufacturing using average (if the field is missing)
-    df['energy_manufacturing'].fillna(defaults["avg_energy_ext"] * 0.05, inplace=True) 
+    # Fallback for Energy Manufacturing
+    if df['energy_manufacturing'].isnull().any():
+         df['energy_manufacturing'].fillna(defaults["avg_energy_ext"] * 0.05, inplace=True)
 
-    # Impute missing co2_manufacturing using the custom factor
+    # Fallback for CO2 Manufacturing (using company specific CO2 factor)
+    # Only apply if still missing after AI
     missing_co2_man = df['co2_manufacturing'].isnull()
-    df.loc[missing_co2_man, 'co2_manufacturing'] = df.loc[missing_co2_man, 'energy_manufacturing'] * defaults["co2_kwh_man"]
+    if missing_co2_man.any():
+        df.loc[missing_co2_man, 'co2_manufacturing'] = df.loc[missing_co2_man, 'energy_manufacturing'] * defaults["co2_kwh_man"]
 
-    # Impute missing transport cost using the custom factor
+    # Fallback for Transport Cost
     missing_transport_cost = df['transport_cost'].isnull()
-    df.loc[missing_transport_cost, 'transport_cost'] = df.loc[missing_transport_cost, 'transport_km'] * defaults["transport_cost_km"]
+    if missing_transport_cost.any():
+        df.loc[missing_transport_cost, 'transport_cost'] = df.loc[missing_transport_cost, 'transport_km'] * defaults["transport_cost_km"]
     
-    # --- Strategy 2: Simple Imputation (Mean/Mode as Last Resort) ---
+    # --- Step 3: Last Resort (Mean/Mode) ---
+    # Ensure no NaNs remain for the simulation
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
     
     for col in numeric_cols:
         if df[col].isnull().any():
-            df[col].fillna(df[col].mean(), inplace=True)
+            df[col].fillna(df[col].mean() if not pd.isna(df[col].mean()) else 0, inplace=True)
     
     for col in categorical_cols:
         if df[col].isnull().any():
@@ -128,20 +153,14 @@ def fill_missing_values(df: pd.DataFrame, defaults: Dict[str, float]) -> pd.Data
 
 
 def run_linear_model(df: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Run linear (traditional) LCA model.
-    FIX: Ensure all columns are explicitly cast to float before summation.
-    """
+    """Run linear (traditional) LCA model."""
     df_clean = df.fillna(0) 
     
-    # CRITICAL FIX: Explicitly cast necessary columns to float/numeric just before calculation
     numeric_cols_for_calc = ['co2_extraction', 'co2_manufacturing', 'transport_km', 
                              'energy_extraction', 'energy_manufacturing', 'material_cost', 'transport_cost']
     
     for col in numeric_cols_for_calc:
-        # Use defensive casting: convert to numeric, coercing errors (if any residual strings), and filling NaN with 0.0
         df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0.0)
-
 
     CO2_total = df_clean["co2_extraction"].sum() + df_clean["co2_manufacturing"].sum() + (df_clean["transport_km"] * 0.001).sum()
     Energy_total = df_clean["energy_extraction"].sum() + df_clean["energy_manufacturing"].sum()
@@ -155,41 +174,32 @@ def run_linear_model(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 def run_circular_model(df: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Run circular economy model with recycling benefits.
-    FIX: Ensure all columns are explicitly cast to float before summation.
-    """
+    """Run circular economy model with recycling benefits."""
     df_clean = df.fillna(0)
     
-    # CRITICAL FIX: Explicitly cast necessary columns to float/numeric just before calculation
     numeric_cols_for_calc = ['recycled_content', 'co2_extraction', 'co2_manufacturing', 'transport_km', 
                              'energy_extraction', 'energy_manufacturing', 'material_cost', 'transport_cost', 'recycling_yield']
     
     for col in numeric_cols_for_calc:
         df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0.0)
 
-    
-    # Key input: Recycled Content Percentage (R)
     R = df_clean["recycled_content"].mean() / 100.0
-    R_factor = 1.0 - (0.7 * R) # Circularity factor: 100% recycled gives 70% overall impact reduction on extraction/manufacturing
+    R_factor = 1.0 - (0.7 * R) 
     
-    # Calculate impacts based on recycled factor
-    CO2_total = (df_clean["co2_extraction"] * R_factor).sum() + (df_clean["co2_manufacturing"] * R_factor).sum() + (df_clean["transport_km"] * 0.0005).sum() # Transport slightly lower
+    CO2_total = (df_clean["co2_extraction"] * R_factor).sum() + (df_clean["co2_manufacturing"] * R_factor).sum() + (df_clean["transport_km"] * 0.0005).sum()
     Energy_total = (df_clean["energy_extraction"] * R_factor).sum() + (df_clean["energy_manufacturing"] * R_factor).sum()
     
-    # Cost modeling: Assume recycling reduces material cost, increasing profit potential
-    Cost_material = df_clean["material_cost"].sum() * (1 - 0.1 * R) # 10% material cost savings from recycling
+    Cost_material = df_clean["material_cost"].sum() * (1 - 0.1 * R)
     Cost_transport = df_clean["transport_cost"].sum()
     Cost_total = Cost_material + Cost_transport
     
-    # Circularity Metric (Mock MCI calculation based on core inputs)
     MCI = R * (df_clean["recycling_yield"].mean() / 100.0)
     
     return {
         "CO2_total_kg": float(CO2_total),
         "Energy_total_MJ": float(Energy_total),
         "Cost_total_USD": float(Cost_total),
-        "Circularity": {"MCI": float(min(MCI, 0.95))}, # Cap MCI slightly below 1.0
+        "Circularity": {"MCI": float(min(MCI, 0.95))},
         "Virgin_Input_percent": float((1.0 - R) * 100),
         "Recycled_Input_percent": float(R * 100)
     }
@@ -198,22 +208,18 @@ def run_circular_model(df: pd.DataFrame) -> Dict[str, Any]:
 def run_scenario_with_recommendation(df: pd.DataFrame, defaults: Dict[str, float]) -> Dict[str, Any]:
     """Run LCA scenarios and provide a recommendation."""
     
-    # 1. Fill missing data using the prioritized defaults
-    df_imputed = fill_missing_values(df, defaults)
+    # Use the Hybrid Imputation (AI + Defaults)
+    df_imputed = run_hybrid_imputation(df, defaults)
     
-    # 2. Run Models
     linear_results = run_linear_model(df_imputed)
     circular_results = run_circular_model(df_imputed)
     
-    # 3. Determine Recommendation
-    # Score based on a weighted average of CO2 and Cost
     linear_score = linear_results["CO2_total_kg"] * 0.5 + linear_results["Cost_total_USD"] * 0.5
     circular_score = circular_results["CO2_total_kg"] * 0.5 + circular_results["Cost_total_USD"] * 0.5
 
     if circular_score < linear_score:
         recommendation = "Circular Model is optimal: projected to save money and reduce emissions."
     else:
-        # A negative cost savings scenario
         recommendation = "Linear Model is currently cheaper, but circularity is essential for long-term supply stability. Optimization needed to close the cost gap."
 
     results = {
@@ -225,16 +231,10 @@ def run_scenario_with_recommendation(df: pd.DataFrame, defaults: Dict[str, float
 
 
 def generate_report(report_data: ReportData) -> io.BytesIO:
-    """
-    Generates a PDF report from simulation results.
-    FIX: Implemented robust division checks and safe dict access to prevent crash.
-    """
+    """Generates a PDF report from simulation results."""
     buffer = io.BytesIO()
-    
-    # Use standard styles
     styles = getSampleStyleSheet()
     
-    # Create custom ParagraphStyle for safety, although 'Normal' should exist
     if 'Normal' not in styles:
         styles['Normal'] = styles.get('BodyText', styles['BodyText'])
     if 'h2' not in styles:
@@ -243,15 +243,10 @@ def generate_report(report_data: ReportData) -> io.BytesIO:
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     story = []
 
-    # Title
     story.append(Paragraph("AI-POWERED CIRCULARITY LCA REPORT", styles['Title']))
     story.append(Spacer(1, 12))
-    
-    # --- Summary Table ---
     story.append(Paragraph("<b>Summary Impact Comparison</b>", styles['h2']))
 
-    # CRITICAL FIX: Explicitly cast the data segments to dicts and use .get()
-    # This prevents the 'int' object has no attribute 'get' error
     linear_data = report_data.linear if isinstance(report_data.linear, dict) else {}
     circular_data = report_data.circular if isinstance(report_data.circular, dict) else {}
     
@@ -260,26 +255,20 @@ def generate_report(report_data: ReportData) -> io.BytesIO:
     linear_cost = linear_data.get('Cost_total_USD', 0.0)
     circular_cost = circular_data.get('Cost_total_USD', 0.0)
     
-    # Further check to ensure Circularity is a dictionary before using .get()
     linear_mci = linear_data.get('Circularity')
     linear_mci = linear_mci.get('MCI', 0.0) if isinstance(linear_mci, dict) else 0.0
-    
     circular_mci = circular_data.get('Circularity')
     circular_mci = circular_mci.get('MCI', 0.0) if isinstance(circular_mci, dict) else 0.0
 
-    # Calculate CO2 Reduction Percentage SAFELY
     co2_reduction_percent = 0.0
     if linear_co2 > 0:
         co2_reduction_percent = ((1 - (circular_co2 / linear_co2)) * 100)
     
     summary_data = [
         ['Metric', 'Linear Scenario', 'Circular Scenario', 'Savings/Improvement'],
-        ['Total CO2 (kg)', f"{linear_co2:.2f}", f"{circular_co2:.2f}", 
-         f"{co2_reduction_percent:.1f}%"],
-        ['Total Cost (USD)', f"{linear_cost:.2f}", f"{circular_cost:.2f}", 
-         f"${(linear_cost - circular_cost):.2f}"],
-        ['Circularity Score (MCI)', f"{linear_mci:.2f}", f"{circular_mci:.2f}", 
-         f"N/A"]
+        ['Total CO2 (kg)', f"{linear_co2:.2f}", f"{circular_co2:.2f}", f"{co2_reduction_percent:.1f}%"],
+        ['Total Cost (USD)', f"{linear_cost:.2f}", f"{circular_cost:.2f}", f"${(linear_cost - circular_cost):.2f}"],
+        ['Circularity Score', f"{linear_mci:.2f}", f"{circular_mci:.2f}", f"N/A"]
     ]
     summary_table = Table(summary_data, colWidths=[150, 100, 100, 150])
     summary_table.setStyle(TableStyle([
@@ -300,10 +289,8 @@ def generate_report(report_data: ReportData) -> io.BytesIO:
     story.append(summary_table)
     story.append(Spacer(1, 24))
 
-    # Recommendations section
     story.append(Paragraph("<b>AI-Driven Recommendations</b>", styles['h2']))
     for rec in report_data.recommendations:
-        # Check if title and text fields exist before formatting
         title_text = rec.get('title', 'Recommendation')
         body_text = rec.get('text', 'No description available.')
         story.append(Paragraph(f"• <b>{title_text}:</b> {body_text}", styles['Normal']))
@@ -318,41 +305,32 @@ def generate_report(report_data: ReportData) -> io.BytesIO:
 
 @app.post("/impute")
 async def impute_data(payload: RequestPayload) -> Dict[str, Any]:
-    """Endpoint for AI data imputation (filling missing values)."""
-    
-    # 1. Get defaults (company-specific or system)
+    """Endpoint for AI data imputation."""
     defaults = get_default_imputation_values(payload.custom_defaults)
     
-    # 2. Convert incoming rows to DataFrame
+    # Convert incoming rows to DataFrame
     df = pd.DataFrame([row.dict() for row in payload.data])
     
-    # 3. Fill missing values using the prioritized logic
-    imputed_df = fill_missing_values(df, defaults)
+    # Use Hybrid Imputation (AI + Domain Defaults)
+    imputed_df = run_hybrid_imputation(df, defaults)
 
-    # 4. Convert DataFrame back to row-oriented list for JSON response
     imputed_data = imputed_df.to_dict('records')
-
     return {"imputed_data": imputed_data}
 
 
 @app.post("/simulate")
 async def simulate_project(payload: RequestPayload) -> Dict[str, Any]:
     """Endpoint to run the full LCA simulation."""
-    
-    # 1. Get defaults (company-specific or system)
     defaults = get_default_imputation_values(payload.custom_defaults)
     
-    # 2. Convert incoming rows to DataFrame
     df = pd.DataFrame([row.dict() for row in payload.data])
     
-    # 3. Run the scenarios
+    # Run scenarios with hybrid imputation
     results = run_scenario_with_recommendation(df, defaults)
     
-    # The frontend expects a separate field for Virgin/Recycled percentages 
-    # which are calculated inside run_circular_model
+    # Add frontend specific percentage data
     if 'circular' in results:
-        # Re-run circular model logic just to grab the percentage calculation
-        circular_results_full = run_circular_model(df) 
+        circular_results_full = run_circular_model(run_hybrid_imputation(df, defaults)) 
         results['circular']['Virgin_Input_percent'] = circular_results_full.get('Virgin_Input_percent', 40)
         results['circular']['Recycled_Input_percent'] = circular_results_full.get('Recycled_Input_percent', 60)
         
@@ -364,7 +342,6 @@ async def generate_report_endpoint(report_data: ReportData) -> Response:
     """Endpoint to generate and return a PDF report."""
     pdf_buffer = generate_report(report_data)
     
-    # The frontend is expecting a blob response with PDF content type
     return Response(content=pdf_buffer.getvalue(), media_type="application/pdf", headers={
         "Content-Disposition": "attachment; filename=lca_report.pdf"
     })
