@@ -1,0 +1,25 @@
+services:
+  # ---- Node.js Backend ----
+  - type: web
+    name: sih2025-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: MONGO_URI
+        sync: false          # You will paste this in the Render dashboard
+      - key: AI_MODEL_URL
+        fromService:
+          name: sih2025-ai-model
+          type: web
+          property: host
+          envVarKey: RENDER_EXTERNAL_URL
+
+  # ---- Python AI Model ----
+  - type: web
+    name: sih2025-ai-model
+    runtime: python
+    rootDir: AI_model
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT

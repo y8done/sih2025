@@ -67,13 +67,14 @@ app.get('/api/defaults/:companyId', async (req, res) => {
 
 
 // ------------------------------------------
-// 3. API GATEWAY ROUTES (Forward to Python: http://localhost:8000)
+// 3. API GATEWAY ROUTES (Forward to Python AI Model)
 // ------------------------------------------
+const AI_MODEL_URL = process.env.AI_MODEL_URL || 'http://localhost:8000';
 
 // A. AI Imputation (AI Auto-Fill)
 app.post('/api/impute', async (req, res) => {
     try {
-        const pythonResponse = await axios.post('http://localhost:8000/impute', req.body);
+        const pythonResponse = await axios.post(`${AI_MODEL_URL}/impute`, req.body);
         res.json(pythonResponse.data);
     } catch (error) {
         console.error('Error calling Python AI model for imputation:', error.response ? error.response.data : error.message);
@@ -84,7 +85,7 @@ app.post('/api/impute', async (req, res) => {
 // B. Simulation Run
 app.post('/api/simulate', async (req, res) => {
     try {
-        const pythonResponse = await axios.post('http://localhost:8000/simulate', req.body);
+        const pythonResponse = await axios.post(`${AI_MODEL_URL}/simulate`, req.body);
         res.json(pythonResponse.data);
     } catch (error) {
         console.error('Error calling Python AI model for simulation:', error.response ? error.response.data : error.message);
@@ -95,7 +96,7 @@ app.post('/api/simulate', async (req, res) => {
 // C. PDF Report Generation
 app.post('/api/report', async (req, res) => {
     try {
-        const pythonResponse = await axios.post('http://localhost:8000/report', req.body, {
+        const pythonResponse = await axios.post(`${AI_MODEL_URL}/report`, req.body, {
             responseType: 'arraybuffer' 
         });
 
